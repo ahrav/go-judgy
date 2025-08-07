@@ -1,0 +1,246 @@
+# golangci-lint configuration for go-judgy
+# Enforces strict code quality and documentation standards
+
+version: "2"
+
+run:
+  timeout: 10m
+  issues-exit-code: 1
+  tests: true
+  build-tags:
+    - tools
+  skip-dirs:
+    - vendor
+    - third_party
+  skip-files:
+    - ".*\\.pb\\.go$"
+    - ".*_generated\\.go$"
+
+output:
+  formats:
+    text:
+      path: stdout
+      colors: true
+      print-issued-lines: true
+      print-linter-name: true
+  uniq-by-line: true
+  path-prefix: ""
+  sort-results: true
+
+linters:
+  default: none
+  enable:
+    # Documentation
+    - godot          # Check comments end in period
+    - godox          # Detect FIXME, TODO and other comment keywords
+
+    # Code quality
+    - gocognit       # Computes and checks the cognitive complexity of functions
+    - goconst        # Finds repeated strings that could be replaced by a constant
+    - gocritic       # Provides diagnostics that check for bugs, performance and style issues
+    - gocyclo        # Computes and checks the cyclomatic complexity of functions
+    - mnd            # An analyzer to detect magic numbers
+    - gomodguard     # Allow and block list linter for direct Go module dependencies
+    - goprintffuncname # Checks that printf-like functions are named with `f` at the end
+    - govet          # Vet examines Go source code and reports suspicious constructs
+    - ineffassign    # Detects when assignments to existing variables are not used
+    - misspell       # Finds commonly misspelled English words in comments
+    - nakedret       # Finds naked returns in functions greater than a specified function length
+    - noctx          # Noctx finds sending http request without context.Context
+    - nolintlint     # Reports ill-formed or insufficient nolint directives
+    - revive         # Fast, configurable, extensible, flexible, and beautiful linter for Go
+    - staticcheck    # Staticcheck is a go vet on steroids, applying a ton of static analysis checks
+    - unconvert      # Remove unnecessary type conversions
+    - unparam        # Reports unused function parameters
+    - unused         # Checks Go code for unused constants, variables, functions and types
+    - whitespace     # Tool for detection of leading and trailing whitespace
+
+    # Error handling
+    - errcheck       # Errcheck is a program for checking for unchecked errors in go programs
+    - errorlint      # Errorlint is a linter for that can be used to find code that will cause problems with the error wrapping scheme introduced in Go 1.13
+    - err113         # Golang linter to check the errors handling expressions
+
+    # Security
+    - gosec          # Inspects source code for security problems
+
+    # Performance
+    - bodyclose      # Checks whether HTTP response body is closed successfully
+    - contextcheck   # Check the function whether use a non-inherited context
+    - nilerr         # Finds the code that returns nil even if it checks that the error is not nil
+    - prealloc       # Finds slice declarations that could potentially be preallocated
+
+    # Complexity
+    - cyclop         # Checks function and package cyclomatic complexity
+    - funlen         # Tool for detection of long functions
+    - nestif         # Reports deeply nested if statements
+
+    # Testing
+    - testpackage    # Linter that makes you use a separate _test package
+
+    # Imports
+    - depguard       # Go linter that checks if package imports are in a list of acceptable packages
+
+  settings:
+    # Imports
+    depguard:
+      rules:
+        main:
+          allow:
+            - $gostd
+            - github.com/ahrav/go-judgy
+            - go.temporal.io/sdk
+            - github.com/stretchr/testify
+
+    # Documentation enforcement
+    godot:
+      scope: declarations
+      exclude:
+        - "Check that the.*"
+      period: true
+      capital: true
+
+    godox:
+      keywords:
+        - NOTE
+        - OPTIMIZE
+        - HACK
+        - BUG
+        - FIXME
+
+    # Code complexity
+    gocognit:
+      min-complexity: 15
+
+    cyclop:
+      max-complexity: 15
+      package-average: 10.0
+      skip-tests: true
+
+    funlen:
+      lines: 80
+      statements: 40
+
+    gofmt:
+      simplify: true
+
+    # Error handling
+    errcheck:
+      check-type-assertions: true
+      check-blank: true
+      exclude-functions:
+        - (*os.File).Close
+        - (*database/sql.Rows).Close
+        - (*database/sql.Stmt).Close
+
+    err113:
+      check-error-free-functions:
+        - errors.New
+        - errors.Unwrap
+
+    # Security
+    gosec:
+      severity: medium
+      confidence: medium
+      excludes:
+        - G104 # Audit errors not checked - covered by errcheck
+
+    # Testing
+    testpackage:
+      skip-regexp: "(export|internal)_test\\.go"
+
+    # Performance
+    prealloc:
+      simple: true
+      range-loops: true
+      for-loops: true
+
+    # Naming conventions
+    revive:
+      rules:
+        - name: package-comments
+          severity: warning
+          disabled: false
+          arguments:
+            - "Package comment should be of the form \"Package <name> ...\""
+        - name: exported
+          severity: error
+          disabled: false
+          arguments:
+            - "checkPrivateReceivers"
+            - "sayRepetitiveInsteadOfStutters"
+        - name: var-naming
+          severity: warning
+          disabled: false
+        - name: confusing-naming
+          severity: warning
+          disabled: false
+        - name: receiver-naming
+          severity: warning
+          disabled: false
+        - name: indent-error-flow
+          severity: warning
+          disabled: false
+        - name: if-return
+          severity: warning
+          disabled: false
+        - name: superfluous-else
+          severity: warning
+          disabled: false
+        - name: unused-parameter
+          severity: warning
+          disabled: false
+        - name: unreachable-code
+          severity: warning
+          disabled: false
+        - name: redefines-builtin-id
+          severity: warning
+          disabled: false
+
+  exclusions:
+    rules:
+      # Exclude some linters from running on tests files
+      - path: _test\.go
+        linters:
+          - gocyclo
+          - errcheck
+          - dupl
+          - gosec
+          - funlen
+          - goconst
+          - gocognit
+          - mnd
+
+      # Exclude some staticcheck messages
+      - linters:
+          - staticcheck
+        text: "SA9003:"
+
+      # Exclude lll issues for long lines with go:generate
+      - linters:
+          - lll
+        source: "^//go:generate "
+
+    max-issues-per-linter: 0
+    max-same-issues: 0
+
+formatters:
+  enable:
+    - gci            # Gci controls Go package import order and makes it deterministic
+    - gofmt          # Gofmt checks whether code was gofmt-ed
+    - gofumpt        # Gofumpt checks whether code was gofumpt-ed
+    - goimports      # Check import statements are formatted according to the 'goimport' command
+
+  settings:
+    # Code style
+    gci:
+      sections:
+        - standard
+        - default
+        - prefix(github.com/ahrav/go-judgy)
+      skip-generated: true
+
+    gofumpt:
+      extra-rules: true
+
+severity:
+  default-severity: error

@@ -1,0 +1,28 @@
+# Simplified kind cluster configuration for go-judgy development
+# Single node setup optimized for local development
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: go-judgy-local
+
+nodes:
+- role: control-plane
+  kubeadmConfigPatches:
+  - |
+    kind: InitConfiguration
+    nodeRegistration:
+      kubeletExtraArgs:
+        node-labels: "ingress-ready=true"
+  extraPortMappings:
+  # Use non-privileged ports for Temporal services
+  - containerPort: 8233
+    hostPort: 8233
+    protocol: TCP  # Temporal frontend
+  - containerPort: 8234
+    hostPort: 8234
+    protocol: TCP  # Temporal web UI
+
+# Registry configuration for local development
+containerdConfigPatches:
+- |-
+  [plugins."io.containerd.grpc.v1.cri".registry.mirrors."localhost:5001"]
+    endpoint = ["http://kind-registry:5000"]
