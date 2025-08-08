@@ -2,9 +2,6 @@
 
 A distributed LLM-as-judge evaluation system built on Temporal for reliable, scalable evaluation workflows with comprehensive budget controls and multi-provider LLM support.
 
-[![CI](https://github.com/ahrav/go-judgy/workflows/CI/badge.svg)](https://github.com/ahrav/go-judgy/actions)
-[![Go Report Card](https://goreportcard.com/badge/github.com/ahrav/go-judgy)](https://goreportcard.com/report/github.com/ahrav/go-judgy)
-[![Coverage](https://codecov.io/gh/ahrav/go-judgy/branch/main/graph/badge.svg)](https://codecov.io/gh/ahrav/go-judgy)
 [![Go Reference](https://pkg.go.dev/badge/github.com/ahrav/go-judgy.svg)](https://pkg.go.dev/github.com/ahrav/go-judgy)
 
 ## What is go-judgy?
