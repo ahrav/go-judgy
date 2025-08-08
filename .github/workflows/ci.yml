@@ -40,6 +40,8 @@ jobs:
         run: go mod download
 
       - name: Run tests with coverage
+        env:
+          GOEXPERIMENT: synctest
         run: |
           go test -cover -coverprofile=coverage.txt -covermode=atomic ./...
 
@@ -94,6 +96,8 @@ jobs:
         run: go mod download
 
       - name: Run tests with race detector
+        env:
+          GOEXPERIMENT: synctest
         run: |
           echo "Running race detection tests..."
           go test -race -timeout 10m ./...

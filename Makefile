@@ -48,17 +48,17 @@ build: ## Build all binaries (worker and cli)
 .PHONY: test
 test: ## Run all tests
 	@echo "Running tests..."
-	@$(GOTEST) $(TEST_FLAGS) ./...
+	@GOEXPERIMENT=synctest $(GOTEST) $(TEST_FLAGS) ./...
 
 .PHONY: test-race
 test-race: ## Run tests with race detection
 	@echo "Running tests with race detection..."
-	@$(GOTEST) $(TEST_FLAGS) $(RACE_FLAGS) ./...
+	@GOEXPERIMENT=synctest $(GOTEST) $(TEST_FLAGS) $(RACE_FLAGS) ./...
 
 .PHONY: test-coverage
 test-coverage: ## Run tests with coverage
 	@echo "Running tests with coverage..."
-	@$(GOTEST) $(TEST_FLAGS) $(COVERAGE_FLAGS) ./...
+	@GOEXPERIMENT=synctest $(GOTEST) $(TEST_FLAGS) $(COVERAGE_FLAGS) ./...
 	@$(GOCMD) tool cover -func=coverage.out
 	@$(GOCMD) tool cover -html=coverage.out -o coverage.html
 
