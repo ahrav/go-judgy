@@ -12,6 +12,21 @@ import (
 	"github.com/ahrav/go-judgy/internal/domain"
 )
 
+// Activity configuration constants for consistent timeout and retry behavior.
+const (
+	// DefaultHeartbeatTimeout specifies the maximum time between activity heartbeats
+	// before Temporal considers the activity unresponsive and triggers timeout.
+	DefaultHeartbeatTimeout = 30 * time.Second
+
+	// DefaultBackoffCoefficient controls exponential backoff between retry attempts.
+	// A value of 2.0 doubles the wait time after each failure.
+	DefaultBackoffCoefficient = 2.0
+
+	// DefaultMaximumRetryAttempts limits the number of automatic retry attempts
+	// before marking the activity as permanently failed.
+	DefaultMaximumRetryAttempts = 3
+)
+
 // EvaluationWorkflow orchestrates answer generation, scoring, and aggregation
 // with deterministic execution. All workflow code must use workflow-safe APIs only.
 //
@@ -36,17 +51,18 @@ func EvaluationWorkflow(
 	}
 
 	// Configure standard timeouts and retry policy for all activities.
+	// This configuration will be used for activity execution in future implementations.
 	ao := workflow.ActivityOptions{
 		StartToCloseTimeout: time.Duration(req.Config.Timeout) * time.Second,
-		HeartbeatTimeout:    30 * time.Second,
+		HeartbeatTimeout:    DefaultHeartbeatTimeout,
 		RetryPolicy: &temporal.RetryPolicy{
 			InitialInterval:    time.Second,
-			BackoffCoefficient: 2.0,
+			BackoffCoefficient: DefaultBackoffCoefficient,
 			MaximumInterval:    time.Minute,
-			MaximumAttempts:    3,
+			MaximumAttempts:    DefaultMaximumRetryAttempts,
 		},
 	}
-	ctx = workflow.WithActivityOptions(ctx, ao)
+	_ = workflow.WithActivityOptions(ctx, ao)
 
 	// Future stories will implement the complete evaluation pipeline:
 	// 1. Budget reservation and management

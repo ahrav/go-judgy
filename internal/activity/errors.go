@@ -38,11 +38,11 @@ var (
 	ErrActivityTimeout = errors.New("activity execution timeout")
 )
 
-// ActivityError represents an activity execution error with detailed context
+// Error represents an activity execution error with detailed context
 // for retry decision making and operational debugging.
-type ActivityError struct {
+type Error struct {
 	// Type indicates the error category for retry and escalation decisions.
-	Type ActivityErrorType
+	Type ErrorType
 
 	// Message provides human-readable error description with actionable details.
 	Message string
@@ -58,7 +58,7 @@ type ActivityError struct {
 }
 
 // Error implements the error interface with comprehensive error information.
-func (e *ActivityError) Error() string {
+func (e *Error) Error() string {
 	retryInfo := "non-retryable"
 	if e.Retryable {
 		retryInfo = "retryable"
@@ -71,38 +71,38 @@ func (e *ActivityError) Error() string {
 }
 
 // Unwrap returns the underlying cause error for error chain inspection.
-func (e *ActivityError) Unwrap() error {
+func (e *Error) Unwrap() error {
 	return e.Cause
 }
 
-// ActivityErrorType categorizes activity errors for appropriate handling strategies.
-type ActivityErrorType string
+// ErrorType categorizes activity errors for appropriate handling strategies.
+type ErrorType string
 
 // Activity error types for comprehensive error classification and handling.
 const (
-	// ActivityErrorValidation indicates input validation or configuration
+	// ErrorValidation indicates input validation or configuration
 	// errors that are non-retryable and require immediate correction.
-	ActivityErrorValidation ActivityErrorType = "validation"
+	ErrorValidation ErrorType = "validation"
 
-	// ActivityErrorProvider indicates external provider failures that
+	// ErrorProvider indicates external provider failures that
 	// may be retryable with appropriate backoff strategies.
-	ActivityErrorProvider ActivityErrorType = "provider"
+	ErrorProvider ErrorType = "provider"
 
-	// ActivityErrorSchema indicates response parsing or validation
+	// ErrorSchema indicates response parsing or validation
 	// failures that may be retryable after repair attempts.
-	ActivityErrorSchema ActivityErrorType = "schema"
+	ErrorSchema ErrorType = "schema"
 
-	// ActivityErrorBudget indicates resource limit violations that
+	// ErrorBudget indicates resource limit violations that
 	// are non-retryable application errors requiring workflow decisions.
-	ActivityErrorBudget ActivityErrorType = "budget"
+	ErrorBudget ErrorType = "budget"
 
-	// ActivityErrorTimeout indicates execution time limit exceeded,
+	// ErrorTimeout indicates execution time limit exceeded,
 	// which may be retryable depending on the underlying cause.
-	ActivityErrorTimeout ActivityErrorType = "timeout"
+	ErrorTimeout ErrorType = "timeout"
 
-	// ActivityErrorBusiness indicates business logic failures that
+	// ErrorBusiness indicates business logic failures that
 	// should be handled at the workflow level rather than retried.
-	ActivityErrorBusiness ActivityErrorType = "business"
+	ErrorBusiness ErrorType = "business"
 )
 
 // nonRetryable wraps an error as a Temporal non-retryable application error.

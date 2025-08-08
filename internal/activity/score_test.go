@@ -1,3 +1,4 @@
+//nolint:testpackage // Tests need access to unexported functions like nonRetryable
 package activity
 
 import (
