@@ -9,12 +9,6 @@ run:
   tests: true
   build-tags:
     - tools
-  skip-dirs:
-    - vendor
-    - third_party
-  skip-files:
-    - ".*\\.pb\\.go$"
-    - ".*_generated\\.go$"
 
 output:
   formats:
@@ -23,9 +17,7 @@ output:
       colors: true
       print-issued-lines: true
       print-linter-name: true
-  uniq-by-line: true
   path-prefix: ""
-  sort-results: true
 
 linters:
   default: none
@@ -113,14 +105,10 @@ linters:
     cyclop:
       max-complexity: 15
       package-average: 10.0
-      skip-tests: true
 
     funlen:
       lines: 80
       statements: 40
-
-    gofmt:
-      simplify: true
 
     # Error handling
     errcheck:
@@ -130,11 +118,6 @@ linters:
         - (*os.File).Close
         - (*database/sql.Rows).Close
         - (*database/sql.Stmt).Close
-
-    err113:
-      check-error-free-functions:
-        - errors.New
-        - errors.Unwrap
 
     # Security
     gosec:
@@ -196,6 +179,12 @@ linters:
           disabled: false
 
   exclusions:
+    generated: strict
+    paths:
+      - vendor
+      - third_party
+      - ".*\\.pb\\.go$"
+      - ".*_generated\\.go$"
     rules:
       # Exclude some linters from running on tests files
       - path: _test\.go
@@ -208,6 +197,7 @@ linters:
           - goconst
           - gocognit
           - mnd
+          - cyclop
 
       # Exclude gocognit for DetermineWinner function in score.go
       - path: score\.go
@@ -225,9 +215,6 @@ linters:
           - lll
         source: "^//go:generate "
 
-    max-issues-per-linter: 0
-    max-same-issues: 0
-
 formatters:
   enable:
     - gci            # Gci controls Go package import order and makes it deterministic
@@ -242,10 +229,12 @@ formatters:
         - standard
         - default
         - prefix(github.com/ahrav/go-judgy)
-      skip-generated: true
+
+    gofmt:
+      simplify: true
 
     gofumpt:
       extra-rules: true
 
 severity:
-  default-severity: error
+  default: error
