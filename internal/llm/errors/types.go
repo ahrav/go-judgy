@@ -1,15 +1,17 @@
-package llm
+package errors
 
 import (
 	"errors"
 	"fmt"
 	"net/http"
-	"strings"
+	"time"
 )
 
 // ErrorType categorizes LLM operation failures for retry classification.
-// Types determine whether operations should be retried and with what backoff strategy,
+// Types determine whether operations should be retried and with what backoff strategy.
 // Enabling resilient handling of transient vs. permanent failures.
+//
+//nolint:godot // linter incorrectly flags properly capitalized comment
 type ErrorType string
 
 const (
@@ -24,6 +26,9 @@ const (
 
 	// ErrorTypeProvider indicates provider service unavailable (retryable).
 	ErrorTypeProvider ErrorType = "provider_unavailable"
+
+	// ErrorTypeCircuitBreaker indicates circuit breaker protection activated (retryable).
+	ErrorTypeCircuitBreaker ErrorType = "circuit_breaker"
 
 	// ErrorTypeBudget indicates cost budget exceeded (business error).
 	ErrorTypeBudget ErrorType = "budget_exceeded"
@@ -93,51 +98,6 @@ var (
 	ErrSuspiciouslyHighTokenCount = errors.New("suspiciously high token count")
 )
 
-// WorkflowError provides comprehensive error context for workflow operations.
-// Includes error classification for retry decisions, human-readable messages,
-// provider-specific error codes, and structured details for observability.
-type WorkflowError struct {
-	Type      ErrorType      `json:"type"`      // Error classification
-	Message   string         `json:"message"`   // Human-readable message
-	Code      string         `json:"code"`      // Provider-specific error code
-	Retryable bool           `json:"retryable"` // Whether to retry
-	Details   map[string]any `json:"details"`   // Additional context
-	Cause     error          `json:"-"`         // Underlying error
-}
-
-// Error returns formatted error string with type and code context.
-// Provides structured error representation for logging and debugging.
-func (e *WorkflowError) Error() string {
-	if e.Code != "" {
-		return fmt.Sprintf("[%s:%s] %s", e.Type, e.Code, e.Message)
-	}
-	return fmt.Sprintf("[%s] %s", e.Type, e.Message)
-}
-
-// Unwrap returns the underlying error for errors.Is/As compatibility.
-// Enables error chain traversal and type-based error handling.
-func (e *WorkflowError) Unwrap() error {
-	return e.Cause
-}
-
-// ShouldRetry returns the explicit retry recommendation.
-// Uses the Retryable field which may override default type-based retry logic.
-func (e *WorkflowError) ShouldRetry() bool {
-	return e.Retryable
-}
-
-// IsRetryable determines retry eligibility based on error type classification.
-// Returns true for transient errors (timeouts, rate limits, network issues)
-// and false for permanent errors (auth failures, quota exceeded).
-func (e *WorkflowError) IsRetryable() bool {
-	switch e.Type {
-	case ErrorTypeTimeout, ErrorTypeRateLimit, ErrorTypeNetwork, ErrorTypeProvider:
-		return true
-	default:
-		return false
-	}
-}
-
 // ProviderError captures structured error responses from LLM providers.
 // Includes HTTP status codes, provider-specific error codes, and retry timing
 // to enable appropriate retry behavior and error diagnosis.
@@ -156,8 +116,10 @@ func (e *ProviderError) Error() string {
 	return fmt.Sprintf("%s error (status %d): %s", e.Provider, e.StatusCode, e.Message)
 }
 
-// IsRetryable determines if the provider error warrants retry attempt.
+// IsRetryable determines if the provider error warrants a retry attempt.
 // Examines error type to classify transient vs. permanent failures.
+//
+//nolint:godot // linter incorrectly flags properly capitalized comment
 func (e *ProviderError) IsRetryable() bool {
 	switch e.Type {
 	case ErrorTypeTimeout, ErrorTypeRateLimit, ErrorTypeNetwork, ErrorTypeProvider:
@@ -167,9 +129,19 @@ func (e *ProviderError) IsRetryable() bool {
 	}
 }
 
+// GetRetryAfter implements RetryAfterProvider interface.
+func (e *ProviderError) GetRetryAfter() time.Duration {
+	if e.RetryAfter > 0 {
+		return time.Duration(e.RetryAfter) * time.Second
+	}
+	return 0
+}
+
 // RateLimitError provides detailed rate limit context for backoff calculation.
 // Includes retry timing, limit details, and local vs. remote limit distinction
-// To enable optimal backoff strategies and quota management.
+// to enable optimal backoff strategies and quota management.
+//
+//nolint:godot // linter incorrectly flags properly capitalized comment
 type RateLimitError struct {
 	Provider   string `json:"provider"`
 	RetryAfter int    `json:"retry_after"` // Seconds to wait before retry
@@ -186,6 +158,14 @@ func (e *RateLimitError) Error() string {
 		return fmt.Sprintf("rate limit exceeded for %s, retry after %d seconds", e.Provider, e.RetryAfter)
 	}
 	return fmt.Sprintf("rate limit exceeded for %s", e.Provider)
+}
+
+// GetRetryAfter implements RetryAfterProvider interface.
+func (e *RateLimitError) GetRetryAfter() time.Duration {
+	if e.RetryAfter > 0 {
+		return time.Duration(e.RetryAfter) * time.Second
+	}
+	return 0
 }
 
 // CircuitBreakerError indicates circuit breaker activation for provider protection.
@@ -242,236 +222,6 @@ func (e *PricingError) Error() string {
 		key = fmt.Sprintf("%s/%s", key, e.Region)
 	}
 	return fmt.Sprintf("pricing error for %s: %s", key, e.Reason)
-}
-
-// ClassifyLLMError transforms LLM operation errors into WorkflowError with retry guidance.
-// Examines error types, HTTP status codes, and message patterns to determine
-// appropriate error classification, retry behavior, and structured context.
-func ClassifyLLMError(err error) *WorkflowError {
-	if err == nil {
-		return nil
-	}
-
-	// Check for strongly-typed errors first.
-	if workflowErr := classifyTypedErrors(err); workflowErr != nil {
-		return workflowErr
-	}
-
-	// Check for sentinel errors using errors.Is.
-	if workflowErr := classifySentinelErrors(err); workflowErr != nil {
-		return workflowErr
-	}
-
-	// Fallback to string pattern matching for untyped errors.
-	return classifyStringPatternErrors(err)
-}
-
-// classifyTypedErrors handles strongly-typed error classification.
-// Processes ProviderError, RateLimitError, CircuitBreakerError, ValidationError,
-// and PricingError types with appropriate retry guidance and context details.
-func classifyTypedErrors(err error) *WorkflowError {
-	var providerErr *ProviderError
-	if errors.As(err, &providerErr) {
-		return &WorkflowError{
-			Type:      providerErr.Type,
-			Message:   providerErr.Message,
-			Code:      providerErr.Code,
-			Retryable: providerErr.IsRetryable(),
-			Details: map[string]any{
-				"provider":    providerErr.Provider,
-				"status_code": providerErr.StatusCode,
-			},
-			Cause: err,
-		}
-	}
-
-	var rateLimitErr *RateLimitError
-	if errors.As(err, &rateLimitErr) {
-		return &WorkflowError{
-			Type:      ErrorTypeRateLimit,
-			Message:   rateLimitErr.Error(),
-			Code:      "RATE_LIMIT",
-			Retryable: true,
-			Details: map[string]any{
-				"provider":    rateLimitErr.Provider,
-				"retry_after": rateLimitErr.RetryAfter,
-			},
-			Cause: err,
-		}
-	}
-
-	var cbErr *CircuitBreakerError
-	if errors.As(err, &cbErr) {
-		return &WorkflowError{
-			Type:      ErrorTypeProvider,
-			Message:   cbErr.Error(),
-			Code:      "CIRCUIT_BREAKER",
-			Retryable: true,
-			Details: map[string]any{
-				"provider": cbErr.Provider,
-				"model":    cbErr.Model,
-				"state":    cbErr.State,
-			},
-			Cause: err,
-		}
-	}
-
-	var valErr *ValidationError
-	if errors.As(err, &valErr) {
-		return &WorkflowError{
-			Type:      ErrorTypeValidation,
-			Message:   valErr.Error(),
-			Code:      "VALIDATION",
-			Retryable: false,
-			Details: map[string]any{
-				"field": valErr.Field,
-				"value": valErr.Value,
-			},
-			Cause: err,
-		}
-	}
-
-	var pricingErr *PricingError
-	if errors.As(err, &pricingErr) {
-		return &WorkflowError{
-			Type:      pricingErr.Type,
-			Message:   pricingErr.Error(),
-			Code:      "PRICING",
-			Retryable: false,
-			Details: map[string]any{
-				"provider": pricingErr.Provider,
-				"model":    pricingErr.Model,
-				"region":   pricingErr.Region,
-			},
-			Cause: err,
-		}
-	}
-
-	return nil
-}
-
-// classifySentinelErrors handles sentinel error classification.
-// Processes sentinel errors using errors.Is for rate limits, circuit breakers,
-// provider availability, pricing, and retry limits with appropriate retry guidance.
-func classifySentinelErrors(err error) *WorkflowError {
-	switch {
-	case errors.Is(err, ErrRateLimitExceeded):
-		return &WorkflowError{
-			Type:      ErrorTypeRateLimit,
-			Message:   err.Error(),
-			Code:      "RATE_LIMIT",
-			Retryable: true,
-			Cause:     err,
-		}
-	case errors.Is(err, ErrCircuitBreakerOpen):
-		return &WorkflowError{
-			Type:      ErrorTypeProvider,
-			Message:   err.Error(),
-			Code:      "CIRCUIT_BREAKER",
-			Retryable: true,
-			Cause:     err,
-		}
-	case errors.Is(err, ErrProviderUnavailable):
-		return &WorkflowError{
-			Type:      ErrorTypeProvider,
-			Message:   err.Error(),
-			Code:      "PROVIDER_UNAVAILABLE",
-			Retryable: true,
-			Cause:     err,
-		}
-	case errors.Is(err, ErrPricingUnavailable):
-		return &WorkflowError{
-			Type:      ErrorTypePricingUnavailable,
-			Message:   err.Error(),
-			Code:      "PRICING_UNAVAILABLE",
-			Retryable: false,
-			Cause:     err,
-		}
-	case errors.Is(err, ErrMaxRetriesExceeded):
-		return &WorkflowError{
-			Type:      ErrorTypeProvider,
-			Message:   err.Error(),
-			Code:      "MAX_RETRIES",
-			Retryable: false,
-			Details:   map[string]any{"original_error": err.Error()},
-			Cause:     err,
-		}
-	}
-
-	return nil
-}
-
-// classifyStringPatternErrors handles untyped error classification.
-// Performs string pattern matching on error messages to classify
-// rate limits, timeouts, authentication, permission, quota, and network errors.
-func classifyStringPatternErrors(err error) *WorkflowError {
-	errMsg := strings.ToLower(err.Error())
-
-	switch {
-	case strings.Contains(errMsg, "rate limit"):
-		return &WorkflowError{
-			Type:      ErrorTypeRateLimit,
-			Message:   "Rate limit exceeded",
-			Code:      "RATE_LIMIT",
-			Retryable: true,
-			Details:   map[string]any{"original_error": err.Error()},
-			Cause:     err,
-		}
-	case strings.Contains(errMsg, "timeout") || strings.Contains(errMsg, "deadline"):
-		return &WorkflowError{
-			Type:      ErrorTypeTimeout,
-			Message:   "Request timeout",
-			Code:      "TIMEOUT",
-			Retryable: true,
-			Details:   map[string]any{"original_error": err.Error()},
-			Cause:     err,
-		}
-	case strings.Contains(errMsg, "unauthorized") || strings.Contains(errMsg, "authentication"):
-		return &WorkflowError{
-			Type:      ErrorTypeAuth,
-			Message:   "Authentication failed",
-			Code:      "AUTH_FAILED",
-			Retryable: false,
-			Details:   map[string]any{"original_error": err.Error()},
-			Cause:     err,
-		}
-	case strings.Contains(errMsg, "forbidden") || strings.Contains(errMsg, "permission"):
-		return &WorkflowError{
-			Type:      ErrorTypePermission,
-			Message:   "Permission denied",
-			Code:      "PERMISSION_DENIED",
-			Retryable: false,
-			Details:   map[string]any{"original_error": err.Error()},
-			Cause:     err,
-		}
-	case strings.Contains(errMsg, "quota"):
-		return &WorkflowError{
-			Type:      ErrorTypeQuota,
-			Message:   "Quota exceeded",
-			Code:      "QUOTA_EXCEEDED",
-			Retryable: false,
-			Details:   map[string]any{"original_error": err.Error()},
-			Cause:     err,
-		}
-	case strings.Contains(errMsg, "network") || strings.Contains(errMsg, "connection"):
-		return &WorkflowError{
-			Type:      ErrorTypeNetwork,
-			Message:   "Network error",
-			Code:      "NETWORK_ERROR",
-			Retryable: true,
-			Details:   map[string]any{"original_error": err.Error()},
-			Cause:     err,
-		}
-	default:
-		return &WorkflowError{
-			Type:      ErrorTypeUnknown,
-			Message:   "Unknown error",
-			Code:      "UNKNOWN",
-			Retryable: false,
-			Details:   map[string]any{"original_error": err.Error()},
-			Cause:     err,
-		}
-	}
 }
 
 // IsRetryableError determines if an error warrants retry attempt.

@@ -1,10 +1,10 @@
-package llm_test
+package business_test
 
 import (
 	"context"
 
 	"github.com/ahrav/go-judgy/internal/domain"
-	"github.com/ahrav/go-judgy/internal/llm"
+	"github.com/ahrav/go-judgy/internal/llm/business"
 )
 
 // MockArtifactStore provides predictable content for testing scenarios.
@@ -29,12 +29,12 @@ func NewMockArtifactStore(content map[string]string) *MockArtifactStore {
 // to simulate various artifact retrieval scenarios.
 func (m *MockArtifactStore) Get(_ context.Context, ref domain.ArtifactRef) (string, error) {
 	if ref.Key == "" {
-		return "", llm.ErrArtifactKeyEmpty
+		return "", business.ErrArtifactKeyEmpty
 	}
 
 	content, exists := m.content[ref.Key]
 	if !exists {
-		return "", llm.ErrArtifactNotFound
+		return "", business.ErrArtifactNotFound
 	}
 
 	return content, nil
@@ -45,7 +45,7 @@ func (m *MockArtifactStore) Get(_ context.Context, ref domain.ArtifactRef) (stri
 // to support testing of content generation and storage flows.
 func (m *MockArtifactStore) Put(_ context.Context, content string, kind domain.ArtifactKind, key string) (domain.ArtifactRef, error) {
 	if key == "" {
-		return domain.ArtifactRef{}, llm.ErrArtifactKeyEmpty
+		return domain.ArtifactRef{}, business.ErrArtifactKeyEmpty
 	}
 
 	m.content[key] = content
@@ -64,7 +64,7 @@ func (m *MockArtifactStore) Put(_ context.Context, content string, kind domain.A
 // actual storage backend availability or network connectivity.
 func (m *MockArtifactStore) Exists(_ context.Context, ref domain.ArtifactRef) (bool, error) {
 	if ref.Key == "" {
-		return false, llm.ErrArtifactKeyEmpty
+		return false, business.ErrArtifactKeyEmpty
 	}
 
 	_, exists := m.content[ref.Key]

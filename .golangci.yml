@@ -201,6 +201,12 @@ linters:
           - lll
         source: "^//go:generate "
 
+      # Exclude nestif for complex nested if block in circuit.go
+      - path: internal/llm/resilience/circuit\.go
+        linters:
+          - nestif
+        source: "if time\\.Since\\(lastFailure\\) > timeout"
+
 formatters:
   enable:
     - gci            # Gci controls Go package import order and makes it deterministic

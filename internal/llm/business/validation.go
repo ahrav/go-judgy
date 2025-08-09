@@ -1,4 +1,4 @@
-package llm
+package business
 
 import (
 	"encoding/json"
@@ -8,6 +8,8 @@ import (
 	"strings"
 
 	"github.com/ahrav/go-judgy/internal/domain"
+	llmerrors "github.com/ahrav/go-judgy/internal/llm/errors"
+	"github.com/ahrav/go-judgy/internal/llm/transport"
 )
 
 // Validation constants.
@@ -68,7 +70,7 @@ func ValidateAndRepairScore(content string, enableRepair bool) (*ScoreData, erro
 	}
 
 	// All attempts failed.
-	return nil, &ValidationError{
+	return nil, &llmerrors.ValidationError{
 		Message: "invalid score response format",
 		Value:   content,
 		Schema:  "ScoreData{value:float64, confidence:float64, reasoning:string}",
@@ -239,7 +241,7 @@ func extractJSON(content string) string {
 // allowing refusal responses to pass through for proper handling.
 func ValidateGenerationResponse(content string) error {
 	if strings.TrimSpace(content) == "" {
-		return &ValidationError{
+		return &llmerrors.ValidationError{
 			Message: "empty generation response",
 		}
 	}
@@ -272,7 +274,7 @@ func ValidateGenerationResponse(content string) error {
 // ValidateProviderResponse validates LLM provider response structure.
 // Checks response completeness, content validity, and token count consistency
 // to ensure provider responses meet minimum quality requirements.
-func ValidateProviderResponse(resp *Response) error {
+func ValidateProviderResponse(resp *transport.Response) error {
 	if resp == nil {
 		return ErrNilResponse
 	}
