@@ -18,7 +18,147 @@ import (
 	"time"
 
 	"github.com/ahrav/go-judgy/internal/domain"
+	"github.com/ahrav/go-judgy/internal/llm/business"
+	"github.com/ahrav/go-judgy/internal/llm/cache"
+	"github.com/ahrav/go-judgy/internal/llm/circuit_breaker"
+	"github.com/ahrav/go-judgy/internal/llm/configuration"
+	"github.com/ahrav/go-judgy/internal/llm/providers"
+	"github.com/ahrav/go-judgy/internal/llm/ratelimit"
+	"github.com/ahrav/go-judgy/internal/llm/resilience"
+	"github.com/ahrav/go-judgy/internal/llm/retry"
+	"github.com/ahrav/go-judgy/internal/llm/transport"
 )
+
+// artifactStoreAdapter adapts business.ArtifactStore to transport.ArtifactStore.
+// It provides artifact storage capabilities for the transport layer while
+// generating timestamp-based artifact keys for unique identification.
+type artifactStoreAdapter struct {
+	store business.ArtifactStore
+}
+
+func newArtifactStoreAdapter(store business.ArtifactStore) transport.ArtifactStore {
+	return &artifactStoreAdapter{store: store}
+}
+
+func (a *artifactStoreAdapter) Get(ctx context.Context, ref domain.ArtifactRef) (string, error) {
+	return a.store.Get(ctx, ref)
+}
+
+// Put stores content in the artifact store with a timestamp-based unique key.
+// The generated key follows the format "artifacts/{nanosecond-timestamp}" to ensure
+// uniqueness across concurrent operations.
+func (a *artifactStoreAdapter) Put(ctx context.Context, content string) (domain.ArtifactRef, error) {
+	id := fmt.Sprintf("artifacts/%d", time.Now().UnixNano())
+	return a.store.Put(ctx, content, domain.ArtifactAnswer, id)
+}
+
+// configArtifactStoreAdapter adapts configuration.ArtifactStore to business.ArtifactStore.
+// It bridges the gap between configuration-level artifact storage and business logic
+// requirements, handling artifact metadata such as kind and key assignment.
+type configArtifactStoreAdapter struct {
+	store configuration.ArtifactStore
+}
+
+func newConfigArtifactStoreAdapter(store configuration.ArtifactStore) business.ArtifactStore {
+	return &configArtifactStoreAdapter{store: store}
+}
+
+func (a *configArtifactStoreAdapter) Get(ctx context.Context, ref domain.ArtifactRef) (string, error) {
+	return a.store.Get(ctx, ref)
+}
+
+func (a *configArtifactStoreAdapter) Put(ctx context.Context, content string, kind domain.ArtifactKind, key string) (domain.ArtifactRef, error) {
+	ref, err := a.store.Put(ctx, content)
+	if err != nil {
+		return ref, err
+	}
+	ref.Kind = kind
+	if key != "" {
+		ref.Key = key
+	}
+	return ref, nil
+}
+
+// Exists checks if an artifact exists in the store using type assertion fallback.
+// It first attempts to use the underlying store's Exists method if available,
+// otherwise falls back to a Get operation to determine existence.
+func (a *configArtifactStoreAdapter) Exists(ctx context.Context, ref domain.ArtifactRef) (bool, error) {
+	if existsStore, ok := a.store.(interface {
+		Exists(context.Context, domain.ArtifactRef) (bool, error)
+	}); ok {
+		return existsStore.Exists(ctx, ref)
+	}
+	_, err := a.store.Get(ctx, ref)
+	if err != nil {
+		return false, nil // Assume not found if Get fails.
+	}
+	return true, nil
+}
+
+// businessScoreValidator adapts business validation functions to transport.ScoreValidator interface.
+// It provides JSON validation and repair capabilities for LLM scoring responses,
+// converting between business and transport layer score data structures.
+type businessScoreValidator struct{}
+
+func newBusinessScoreValidator() transport.ScoreValidator {
+	return &businessScoreValidator{}
+}
+
+// ValidateAndRepairScore validates and optionally repairs malformed JSON score content.
+// It delegates to business layer validation logic and converts the result to transport format.
+// When enableRepair is true, attempts to fix common JSON formatting issues in LLM responses.
+func (v *businessScoreValidator) ValidateAndRepairScore(content string, enableRepair bool) (*transport.ScoreData, error) {
+	scoreData, err := business.ValidateAndRepairScore(content, enableRepair)
+	if err != nil {
+		return nil, err
+	}
+
+	return &transport.ScoreData{
+		Value:      scoreData.Value,
+		Confidence: scoreData.Confidence,
+		Reasoning:  scoreData.Reasoning,
+		Dimensions: scoreData.Dimensions,
+	}, nil
+}
+
+// routerAdapter adapts providers.Router to transport.Router.
+// It enables the transport layer to access provider routing capabilities
+// while maintaining clean separation between routing and transport concerns.
+type routerAdapter struct {
+	router providers.Router
+}
+
+func newRouterAdapter(router providers.Router) transport.Router {
+	return &routerAdapter{router: router}
+}
+
+func (r *routerAdapter) Pick(provider, model string) (transport.ProviderAdapter, error) {
+	providerAdapter, err := r.router.Pick(provider, model)
+	if err != nil {
+		return nil, err
+	}
+
+	return &providerAdapterWrapper{adapter: providerAdapter}, nil
+}
+
+// providerAdapterWrapper wraps providers.ProviderAdapter to implement transport.ProviderAdapter.
+// It provides a bridge between provider-specific adapters and transport layer interfaces,
+// delegating HTTP request building and response parsing to the underlying provider.
+type providerAdapterWrapper struct {
+	adapter providers.ProviderAdapter
+}
+
+func (w *providerAdapterWrapper) Build(ctx context.Context, req *transport.Request) (*http.Request, error) {
+	return w.adapter.Build(ctx, req)
+}
+
+func (w *providerAdapterWrapper) Parse(httpResp *http.Response) (*transport.Response, error) {
+	return w.adapter.Parse(httpResp)
+}
+
+func (w *providerAdapterWrapper) Name() string {
+	return w.adapter.Name()
+}
 
 // Token and scoring constants.
 const (
@@ -43,94 +183,115 @@ type Client interface {
 
 // client implements the Client interface with full middleware pipeline.
 type client struct {
-	config        *Config
-	router        Router
-	handler       Handler
-	artifactStore ArtifactStore
+	config        *configuration.Config
+	router        providers.Router
+	handler       transport.Handler
+	artifactStore business.ArtifactStore
 }
 
 // NewClient creates a production-ready LLM client with comprehensive resilience.
 // Builds complete middleware pipeline including caching, circuit breaking,
 // rate limiting, retry logic, pricing, and observability for robust operation.
-func NewClient(cfg *Config) (Client, error) {
+func NewClient(cfg *configuration.Config) (Client, error) {
 	if cfg == nil {
-		cfg = DefaultConfig()
+		cfg = configuration.DefaultConfig()
 	}
 
-	artifactStore := cfg.ArtifactStore
-	if artifactStore == nil {
-		artifactStore = NewInMemoryArtifactStore()
+	var businessArtifactStore business.ArtifactStore
+	if cfg.ArtifactStore == nil {
+		businessArtifactStore = business.NewInMemoryArtifactStore()
+	} else {
+		businessArtifactStore = newConfigArtifactStoreAdapter(cfg.ArtifactStore)
 	}
 
-	router, err := NewRouter(cfg.Providers)
+	router, err := providers.NewRouter(cfg.Providers)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize router: %w", err)
 	}
 
 	httpClient := cfg.HTTPClient
 	if httpClient == nil {
-		transport := &http.Transport{
+		httpTransport := &http.Transport{
 			Proxy:                 http.ProxyFromEnvironment,
-			MaxIdleConns:          DefaultMaxIdleConns,
-			IdleConnTimeout:       DefaultIdleTimeoutSeconds * time.Second,
-			TLSHandshakeTimeout:   DefaultTLSTimeoutSeconds * time.Second,
+			MaxIdleConns:          configuration.DefaultMaxIdleConns,
+			IdleConnTimeout:       configuration.DefaultIdleTimeoutSeconds * time.Second,
+			TLSHandshakeTimeout:   configuration.DefaultTLSTimeoutSeconds * time.Second,
 			ExpectContinueTimeout: 1 * time.Second,
 		}
 		httpClient = &http.Client{
-			Transport: transport,
+			Transport: httpTransport,
 			Timeout:   cfg.HTTPTimeout,
 		}
 	}
 
-	coreHandler := &httpHandler{
-		client: httpClient,
-		router: router,
-	}
+	coreHandler := transport.NewHTTPHandler(httpClient, newRouterAdapter(router), nil)
 
-	var middlewares []Middleware
-
-	if cfg.Cache.Enabled {
-		cacheMiddleware, err := NewCacheMiddleware(cfg.Cache)
-		if err != nil {
-			return nil, fmt.Errorf("failed to initialize cache: %w", err)
-		}
-		middlewares = append(middlewares, cacheMiddleware)
-	}
-
-	cbMiddleware := NewCircuitBreakerMiddleware(cfg.CircuitBreaker)
-	middlewares = append(middlewares, cbMiddleware)
+	// Build attempt-level middleware stack (applied per retry attempt)
+	var attemptMiddlewares []transport.Middleware
 
 	if cfg.RateLimit.Local.Enabled {
-		rlMiddleware, err := NewRateLimitMiddleware(cfg.RateLimit)
+		rlMiddleware, err := ratelimit.NewRateLimitMiddlewareWithRedis(&cfg.RateLimit, nil)
 		if err != nil {
 			return nil, fmt.Errorf("failed to initialize rate limiter: %w", err)
 		}
-		middlewares = append(middlewares, rlMiddleware)
+		attemptMiddlewares = append(attemptMiddlewares, rlMiddleware)
 	}
-
-	retryMiddleware := NewRetryMiddleware(cfg.Retry)
-	middlewares = append(middlewares, retryMiddleware)
 
 	if cfg.Pricing.Enabled {
-		pricingMiddleware, err := NewPricingMiddleware(cfg.Pricing)
-		if err != nil {
-			return nil, fmt.Errorf("failed to initialize pricing: %w", err)
-		}
-		middlewares = append(middlewares, pricingMiddleware)
+		pricingMiddleware := business.NewPricingMiddlewareWithRegistry(business.NewInMemoryPricingRegistry(true))
+		attemptMiddlewares = append(attemptMiddlewares, pricingMiddleware)
 	}
+
+	attemptHandler := transport.Chain(coreHandler, attemptMiddlewares...)
+
+	// Wrap attempt handler with retry logic
+	retryMiddleware, err := retry.NewRetryMiddlewareWithConfig(cfg.Retry)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize retry middleware: %w", err)
+	}
+	retryHandler := retryMiddleware(attemptHandler)
+
+	// Build call-level middleware stack (applied per logical call)
+	var callMiddlewares []transport.Middleware
 
 	if cfg.Observability.MetricsEnabled {
-		obsMiddleware := NewObservabilityMiddleware(cfg.Observability)
-		middlewares = append(middlewares, obsMiddleware)
+		obsMiddleware, err := resilience.NewObservabilityMiddleware()
+		if err != nil {
+			return nil, fmt.Errorf("failed to initialize observability middleware: %w", err)
+		}
+		callMiddlewares = append(callMiddlewares, obsMiddleware)
 	}
 
-	handler := Chain(coreHandler, middlewares...)
+	if cfg.Cache.Enabled {
+		cacheMiddleware, err := cache.NewCacheMiddlewareWithRedis(cfg.Cache, nil)
+		if err != nil {
+			return nil, fmt.Errorf("failed to initialize cache: %w", err)
+		}
+		callMiddlewares = append(callMiddlewares, cacheMiddleware)
+	}
+
+	resilienceConfig := circuit_breaker.CircuitBreakerConfig{
+		FailureThreshold:   cfg.CircuitBreaker.FailureThreshold,
+		SuccessThreshold:   cfg.CircuitBreaker.SuccessThreshold,
+		OpenTimeout:        cfg.CircuitBreaker.OpenTimeout,
+		HalfOpenProbes:     cfg.CircuitBreaker.HalfOpenProbes,
+		ProbeTimeout:       cfg.CircuitBreaker.ProbeTimeout,
+		MaxBreakers:        cfg.CircuitBreaker.MaxBreakers,
+		AdaptiveThresholds: cfg.CircuitBreaker.AdaptiveThresholds,
+	}
+	cbMiddleware, err := circuit_breaker.NewCircuitBreakerMiddlewareWithRedis(resilienceConfig, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize circuit breaker: %w", err)
+	}
+	callMiddlewares = append(callMiddlewares, cbMiddleware)
+
+	handler := transport.Chain(retryHandler, callMiddlewares...)
 
 	return &client{
 		config:        cfg,
 		router:        router,
 		handler:       handler,
-		artifactStore: artifactStore,
+		artifactStore: businessArtifactStore,
 	}, nil
 }
 
@@ -145,20 +306,20 @@ func (c *client) Generate(
 	}
 
 	for i := 0; i < in.NumAnswers; i++ {
-		req := &Request{
-			Operation:     OpGeneration,
+		req := &transport.Request{
+			Operation:     transport.OpGeneration,
 			Provider:      in.Config.Provider,
 			Model:         in.Config.Model,
-			TenantID:      extractTenantID(ctx),
+			TenantID:      transport.ExtractTenantID(ctx),
 			Question:      in.Question,
 			MaxTokens:     in.Config.MaxAnswerTokens,
 			Temperature:   in.Config.Temperature,
 			Timeout:       time.Duration(in.Config.Timeout) * time.Second,
-			TraceID:       extractTraceID(ctx),
-			ArtifactStore: c.artifactStore,
+			TraceID:       transport.ExtractTraceID(ctx),
+			ArtifactStore: newArtifactStoreAdapter(c.artifactStore),
 		}
 
-		key, err := GenerateIdemKey(req)
+		key, err := transport.GenerateIdemKey(req)
 		if err != nil {
 			output.Error = fmt.Sprintf("failed to generate idempotency key for answer %d: %v", i+1, err)
 			continue
@@ -171,7 +332,7 @@ func (c *client) Generate(
 			continue
 		}
 
-		answer := responseToAnswer(resp, req)
+		answer := transport.ResponseToAnswer(resp, req)
 		output.Answers = append(output.Answers, *answer)
 
 		output.TokensUsed += resp.Usage.TotalTokens
@@ -194,23 +355,23 @@ func (c *client) Score(ctx context.Context, in domain.ScoreAnswersInput) (*domai
 	}
 
 	for _, answer := range in.Answers {
-		req := &Request{
-			Operation:     OpScoring,
+		req := &transport.Request{
+			Operation:     transport.OpScoring,
 			Provider:      in.Config.Provider,
 			Model:         in.Config.Model,
-			TenantID:      extractTenantID(ctx),
+			TenantID:      transport.ExtractTenantID(ctx),
 			Question:      in.Question,
 			Answers:       []domain.Answer{answer},
 			MaxTokens:     DefaultMaxTokens,          // Scoring typically needs less tokens
 			Temperature:   DefaultScoringTemperature, // Low temperature for consistent scoring
 			Timeout:       time.Duration(in.Config.Timeout) * time.Second,
-			TraceID:       extractTraceID(ctx),
-			ArtifactStore: c.artifactStore,
+			TraceID:       transport.ExtractTraceID(ctx),
+			ArtifactStore: newArtifactStoreAdapter(c.artifactStore),
 		}
 
-		key, err := GenerateIdemKey(req)
+		key, err := transport.GenerateIdemKey(req)
 		if err != nil {
-			score := createInvalidScore(answer.ID, fmt.Errorf("failed to generate idempotency key: %w", err))
+			score := transport.CreateInvalidScore(answer.ID, fmt.Errorf("failed to generate idempotency key: %w", err))
 			output.Scores = append(output.Scores, *score)
 			continue
 		}
@@ -218,14 +379,15 @@ func (c *client) Score(ctx context.Context, in domain.ScoreAnswersInput) (*domai
 
 		resp, err := c.handler.Handle(ctx, req)
 		if err != nil {
-			score := createInvalidScore(answer.ID, err)
+			score := transport.CreateInvalidScore(answer.ID, err)
 			output.Scores = append(output.Scores, *score)
 			continue
 		}
 
-		score, err := responseToScore(resp, answer.ID, req, c.config.Features.DisableJSONRepair)
+		validator := newBusinessScoreValidator()
+		score, err := transport.ResponseToScore(resp, answer.ID, req, validator, c.config.Features.DisableJSONRepair)
 		if err != nil {
-			score = createInvalidScore(answer.ID, err)
+			score = transport.CreateInvalidScore(answer.ID, err)
 		}
 
 		output.Scores = append(output.Scores, *score)

@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/ahrav/go-judgy/internal/domain"
-	"github.com/ahrav/go-judgy/internal/llm"
+	llmerrors "github.com/ahrav/go-judgy/internal/llm/errors"
 )
 
 // ScoreAnswers evaluates candidate answers using configured judge models.
@@ -21,7 +21,7 @@ func (a *Activities) ScoreAnswers(
 
 	output, err := a.llmClient.Score(ctx, input)
 	if err != nil {
-		if wfErr := llm.ClassifyLLMError(err); wfErr != nil && wfErr.ShouldRetry() {
+		if wfErr := llmerrors.ClassifyLLMError(err); wfErr != nil && wfErr.ShouldRetry() {
 			return nil, retryable("ScoreAnswers", err, wfErr.Message)
 		}
 		return nil, nonRetryable("ScoreAnswers", err, "scoring failed")

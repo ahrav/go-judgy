@@ -6,6 +6,8 @@ import (
 
 	"github.com/ahrav/go-judgy/internal/domain"
 	"github.com/ahrav/go-judgy/internal/llm"
+	"github.com/ahrav/go-judgy/internal/llm/configuration"
+	llmerrors "github.com/ahrav/go-judgy/internal/llm/errors"
 )
 
 // Activities provides activity functions with proper dependency injection.
@@ -22,9 +24,9 @@ func NewActivities(client llm.Client) *Activities {
 // Returns the client for dependency injection rather than setting global state.
 // Must be called during worker startup to establish the client with middleware
 // pipeline including caching, circuit breaking, rate limiting, and observability.
-func InitializeLLMClient(cfg *llm.Config) (llm.Client, error) {
+func InitializeLLMClient(cfg *configuration.Config) (llm.Client, error) {
 	if cfg == nil {
-		cfg = llm.DefaultConfig()
+		cfg = configuration.DefaultConfig()
 	}
 
 	client, err := llm.NewClient(cfg)
@@ -49,7 +51,7 @@ func (a *Activities) GenerateAnswers(
 
 	output, err := a.llmClient.Generate(ctx, input)
 	if err != nil {
-		if wfErr := llm.ClassifyLLMError(err); wfErr != nil && wfErr.ShouldRetry() {
+		if wfErr := llmerrors.ClassifyLLMError(err); wfErr != nil && wfErr.ShouldRetry() {
 			return nil, retryable("GenerateAnswers", err, wfErr.Message)
 		}
 		return nil, nonRetryable("GenerateAnswers", err, "generation failed")
