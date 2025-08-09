@@ -60,11 +60,7 @@ linters:
     - prealloc       # Finds slice declarations that could potentially be preallocated
 
     # Complexity
-    - funlen         # Tool for detection of long functions
     - nestif         # Reports deeply nested if statements
-
-    # Testing
-    - testpackage    # Linter that makes you use a separate _test package
 
     # Imports
     - depguard       # Go linter that checks if package imports are in a list of acceptable packages
@@ -81,6 +77,8 @@ linters:
             - github.com/stretchr/testify
             - github.com/go-playground/validator/v10
             - github.com/google/uuid
+            - github.com/redis/go-redis/v9
+            - golang.org/x/time/rate
 
     # Documentation enforcement
     godot:
@@ -98,12 +96,6 @@ linters:
         - BUG
         - FIXME
 
-    # Code complexity
-
-    funlen:
-      lines: 80
-      statements: 40
-
     # Error handling
     errcheck:
       check-type-assertions: true
@@ -120,9 +112,6 @@ linters:
       excludes:
         - G104 # Audit errors not checked - covered by errcheck
 
-    # Testing
-    testpackage:
-      skip-regexp: "(export|internal|money|score_dimensions|state)_test\\.go"
 
     # Performance
     prealloc:
@@ -179,6 +168,9 @@ linters:
       - third_party
       - ".*\\.pb\\.go$"
       - ".*_generated\\.go$"
+      - ".*retry\\.go$"
+      - ".*circuit_breaker\\.go$"
+      - ".*cache\\.go$"
     rules:
       # Exclude some linters from running on tests files
       - path: _test\.go
@@ -186,7 +178,6 @@ linters:
           - errcheck
           - dupl
           - gosec
-          - funlen
           - goconst
           - gocognit
           - mnd

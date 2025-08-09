@@ -11,7 +11,7 @@ import (
 )
 
 // responseToAnswer converts an LLM response to a domain Answer.
-func responseToAnswer(resp *Request, req *LLMRequest) *domain.Answer {
+func responseToAnswer(resp *LLMResponse, req *Request) *domain.Answer {
 	id := uuid.New().String()
 
 	contentRef := domain.ArtifactRef{
@@ -38,7 +38,7 @@ func responseToAnswer(resp *Request, req *LLMRequest) *domain.Answer {
 			CallsUsed:        1,
 		},
 		AnswerCost: domain.AnswerCost{
-			EstimatedCost: domain.Cents(resp.EstimatedCostMilliCents / 1000), // Convert to cents for domain precision.
+			EstimatedCost: domain.Cents(resp.EstimatedCostMilliCents / MilliCentsToFactor), // Convert to cents for domain precision.
 		},
 		AnswerState: domain.AnswerState{
 			FinishReason: resp.FinishReason,
@@ -51,7 +51,7 @@ func responseToAnswer(resp *Request, req *LLMRequest) *domain.Answer {
 }
 
 // responseToScore converts an LLM response to a domain Score.
-func responseToScore(resp *Request, answerID string, req *LLMRequest, disableJSONRepair bool) (*domain.Score, error) {
+func responseToScore(resp *LLMResponse, answerID string, req *Request, disableJSONRepair bool) (*domain.Score, error) {
 	scoreData, err := ValidateAndRepairScore(resp.Content, !disableJSONRepair)
 	if err != nil {
 		return nil, fmt.Errorf("invalid score response: %w", err)
@@ -84,7 +84,7 @@ func responseToScore(resp *Request, answerID string, req *LLMRequest, disableJSO
 			LatencyMs:  resp.Usage.LatencyMs,
 			TokensUsed: resp.Usage.TotalTokens,
 			CallsUsed:  1,
-			CostCents:  domain.Cents(resp.EstimatedCostMilliCents / 1000), // Convert for domain precision.
+			CostCents:  domain.Cents(resp.EstimatedCostMilliCents / MilliCentsToFactor), // Convert for domain precision.
 		},
 		ScoreValidity: domain.ScoreValidity{
 			Valid: true,

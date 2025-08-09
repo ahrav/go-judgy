@@ -66,7 +66,7 @@ type IdemKey string
 // The normalization pipeline ensures equivalent requests produce identical
 // canonical representations by applying consistent text normalization,
 // parameter filtering, and message structuring across all provider types.
-func BuildCanonicalPayload(req *LLMRequest) (*CanonicalPayload, error) {
+func BuildCanonicalPayload(req *Request) (*CanonicalPayload, error) {
 	payload := &CanonicalPayload{
 		TenantID:  req.TenantID,
 		Operation: req.Operation,
@@ -154,7 +154,7 @@ func BuildIdemKey(payload *CanonicalPayload) (IdemKey, error) {
 // GenerateIdemKey builds canonical payload and generates the idempotency key.
 // This convenience function combines payload normalization and key generation
 // for direct use from LLM requests.
-func GenerateIdemKey(req *LLMRequest) (IdemKey, error) {
+func GenerateIdemKey(req *Request) (IdemKey, error) {
 	payload, err := BuildCanonicalPayload(req)
 	if err != nil {
 		return "", fmt.Errorf("failed to build canonical payload: %w", err)

@@ -11,6 +11,11 @@ import (
 	"github.com/ahrav/go-judgy/internal/domain"
 )
 
+// Logging constants.
+const (
+	ContentTruncationLimit = 200
+)
+
 // Metrics provides observability data collection for LLM operations.
 // Supports counters, histograms, and gauges with tag-based dimensionality
 // to enable monitoring, alerting, and performance analysis across providers.
@@ -32,10 +37,13 @@ func NewNoOpMetrics() *NoOpMetrics {
 	return &NoOpMetrics{}
 }
 
+// IncrementCounter increments a counter metric (no-op implementation).
 func (n *NoOpMetrics) IncrementCounter(_ string, _ map[string]string, _ float64) {}
 
+// RecordHistogram records a histogram metric (no-op implementation).
 func (n *NoOpMetrics) RecordHistogram(_ string, _ map[string]string, _ float64) {}
 
+// SetGauge sets a gauge metric (no-op implementation).
 func (n *NoOpMetrics) SetGauge(_ string, _ map[string]string, _ float64) {}
 
 // LoggingMiddleware provides comprehensive observability for LLM request lifecycle.
@@ -73,7 +81,7 @@ func NewLoggingMiddleware(config ObservabilityConfig, logger *slog.Logger, metri
 // Captures request start/completion events, measures latency, records usage metrics,
 // and provides error classification for monitoring and alerting.
 func (m *LoggingMiddleware) Middleware(next Handler) Handler {
-	return HandlerFunc(func(ctx context.Context, req *LLMRequest) (*Request, error) {
+	return HandlerFunc(func(ctx context.Context, req *Request) (*LLMResponse, error) {
 		requestID := req.TraceID
 		if requestID == "" {
 			requestID = uuid.New().String()
@@ -109,7 +117,7 @@ func (m *LoggingMiddleware) Middleware(next Handler) Handler {
 // logRequest captures structured request data with configurable content redaction.
 // Logs provider, model, operation details while protecting sensitive prompts
 // based on redaction configuration for compliance and security.
-func (m *LoggingMiddleware) logRequest(ctx context.Context, req *LLMRequest, requestID string) {
+func (m *LoggingMiddleware) logRequest(_ context.Context, req *Request, requestID string) {
 	fields := []any{
 		"request_id", requestID,
 		"provider", req.Provider,
@@ -151,8 +159,8 @@ func (m *LoggingMiddleware) logRequest(ctx context.Context, req *LLMRequest, req
 // Logs detailed error context, records error metrics by type, and provides
 // structured data for error analysis and alerting systems.
 func (m *LoggingMiddleware) handleError(
-	ctx context.Context,
-	req *LLMRequest,
+	_ context.Context,
+	req *Request,
 	err error,
 	requestID string,
 	duration time.Duration,
@@ -186,9 +194,9 @@ func (m *LoggingMiddleware) handleError(
 // Logs response details, records token usage and cost metrics, with configurable
 // content redaction to balance observability and data protection.
 func (m *LoggingMiddleware) handleSuccess(
-	ctx context.Context,
-	req *LLMRequest,
-	resp *Request,
+	_ context.Context,
+	req *Request,
+	resp *LLMResponse,
 	requestID string,
 	duration time.Duration,
 	baseTags map[string]string,
@@ -223,8 +231,8 @@ func (m *LoggingMiddleware) handleSuccess(
 		fields = append(fields, "response_length", len(resp.Content))
 	} else {
 		content := resp.Content
-		if len(content) > 200 {
-			content = content[:200] + "..."
+		if len(content) > ContentTruncationLimit {
+			content = content[:ContentTruncationLimit] + "..."
 		}
 		fields = append(fields, "response_preview", content)
 	}

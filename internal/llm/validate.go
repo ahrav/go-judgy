@@ -10,6 +10,11 @@ import (
 	"github.com/ahrav/go-judgy/internal/domain"
 )
 
+// Validation constants.
+const (
+	PercentageConversionFactor = 100
+)
+
 // Validation errors for score data.
 var (
 	ErrScoreValueOutOfRange     = errors.New("score value must be between 0 and 1")
@@ -52,32 +57,14 @@ func ValidateAndRepairScore(content string, enableRepair bool) (*ScoreData, erro
 
 	// Second attempt: repair JSON if enabled.
 	if enableRepair {
-		repairedJSON := repairJSON(content)
-		if repairedJSON != content {
-			if err := json.Unmarshal([]byte(repairedJSON), &score); err == nil {
-				if err := validateScoreData(&score); err == nil {
-					return &score, nil
-				}
-				if repaired := repairScoreData(&score); repaired != nil {
-					return repaired, nil
-				}
-			}
+		if result := tryParseRepairedJSON(content); result != nil {
+			return result, nil
 		}
 	}
 
 	// Third attempt: extract JSON from markdown or text.
-	extracted := extractJSON(content)
-	if extracted != "" && extracted != content {
-		if err := json.Unmarshal([]byte(extracted), &score); err == nil {
-			if err := validateScoreData(&score); err == nil {
-				return &score, nil
-			}
-			if enableRepair {
-				if repaired := repairScoreData(&score); repaired != nil {
-					return repaired, nil
-				}
-			}
-		}
+	if result := tryParseExtractedJSON(content, enableRepair); result != nil {
+		return result, nil
 	}
 
 	// All attempts failed.
@@ -129,8 +116,8 @@ func repairScoreData(score *ScoreData) *ScoreData {
 		modified = true
 	} else if repaired.Value > 1 {
 		// Check if it's a percentage (e.g., 85 instead of 0.85).
-		if repaired.Value <= 100 {
-			repaired.Value = repaired.Value / 100
+		if repaired.Value <= PercentageConversionFactor {
+			repaired.Value /= 100
 			modified = true
 		} else {
 			repaired.Value = 1
@@ -144,8 +131,8 @@ func repairScoreData(score *ScoreData) *ScoreData {
 		modified = true
 	} else if repaired.Confidence > 1 {
 		// Check if it's a percentage.
-		if repaired.Confidence <= 100 {
-			repaired.Confidence = repaired.Confidence / 100
+		if repaired.Confidence <= PercentageConversionFactor {
+			repaired.Confidence /= 100
 			modified = true
 		} else {
 			repaired.Confidence = 1
@@ -165,8 +152,8 @@ func repairScoreData(score *ScoreData) *ScoreData {
 			repaired.Dimensions[i].Value = 0
 			modified = true
 		} else if repaired.Dimensions[i].Value > 1 {
-			if repaired.Dimensions[i].Value <= 100 {
-				repaired.Dimensions[i].Value = repaired.Dimensions[i].Value / 100
+			if repaired.Dimensions[i].Value <= PercentageConversionFactor {
+				repaired.Dimensions[i].Value /= 100
 				modified = true
 			} else {
 				repaired.Dimensions[i].Value = 1
@@ -285,7 +272,7 @@ func ValidateGenerationResponse(content string) error {
 // ValidateProviderResponse validates LLM provider response structure.
 // Checks response completeness, content validity, and token count consistency
 // to ensure provider responses meet minimum quality requirements.
-func ValidateProviderResponse(resp *Request) error {
+func ValidateProviderResponse(resp *LLMResponse) error {
 	if resp == nil {
 		return ErrNilResponse
 	}
@@ -332,4 +319,48 @@ func DefaultRepairConfig() *RepairConfig {
 		EnableClamping:   true,
 		EnableDefaults:   true,
 	}
+}
+
+// tryParseRepairedJSON attempts to parse JSON after applying repairs.
+// Returns parsed and validated ScoreData if successful, nil otherwise.
+func tryParseRepairedJSON(content string) *ScoreData {
+	repairedJSON := repairJSON(content)
+	if repairedJSON == content {
+		return nil
+	}
+
+	var score ScoreData
+	if err := json.Unmarshal([]byte(repairedJSON), &score); err != nil {
+		return nil
+	}
+
+	if err := validateScoreData(&score); err == nil {
+		return &score
+	}
+
+	return repairScoreData(&score)
+}
+
+// tryParseExtractedJSON attempts to parse JSON extracted from markdown or text.
+// Returns parsed and validated ScoreData if successful, nil otherwise.
+func tryParseExtractedJSON(content string, enableRepair bool) *ScoreData {
+	extracted := extractJSON(content)
+	if extracted == "" || extracted == content {
+		return nil
+	}
+
+	var score ScoreData
+	if err := json.Unmarshal([]byte(extracted), &score); err != nil {
+		return nil
+	}
+
+	if err := validateScoreData(&score); err == nil {
+		return &score
+	}
+
+	if !enableRepair {
+		return nil
+	}
+
+	return repairScoreData(&score)
 }

@@ -24,7 +24,9 @@ type mockLLMClient struct {
 
 // Generate simulates LLM answer generation with controllable error behavior.
 // Returns configurable errors or minimal valid responses for testing activity logic.
-func (m *mockLLMClient) Generate(ctx context.Context, in domain.GenerateAnswersInput) (*domain.GenerateAnswersOutput, error) {
+func (m *mockLLMClient) Generate(
+	_ context.Context, in domain.GenerateAnswersInput,
+) (*domain.GenerateAnswersOutput, error) {
 	m.generateCalls++
 
 	if m.generateReturnsError {

@@ -1,9 +1,10 @@
-package llm
+package llm_test
 
 import (
 	"context"
 
 	"github.com/ahrav/go-judgy/internal/domain"
+	"github.com/ahrav/go-judgy/internal/llm"
 )
 
 // MockArtifactStore provides predictable content for testing scenarios.
@@ -26,14 +27,14 @@ func NewMockArtifactStore(content map[string]string) *MockArtifactStore {
 // Get retrieves predefined content from mock storage.
 // Returns test content for configured keys or appropriate errors
 // to simulate various artifact retrieval scenarios.
-func (m *MockArtifactStore) Get(ctx context.Context, ref domain.ArtifactRef) (string, error) {
+func (m *MockArtifactStore) Get(_ context.Context, ref domain.ArtifactRef) (string, error) {
 	if ref.Key == "" {
-		return "", ErrArtifactKeyEmpty
+		return "", llm.ErrArtifactKeyEmpty
 	}
 
 	content, exists := m.content[ref.Key]
 	if !exists {
-		return "", ErrArtifactNotFound
+		return "", llm.ErrArtifactNotFound
 	}
 
 	return content, nil
@@ -42,9 +43,9 @@ func (m *MockArtifactStore) Get(ctx context.Context, ref domain.ArtifactRef) (st
 // Put stores content in mock storage for testing workflows.
 // Updates predefined content map and creates artifact reference
 // to support testing of content generation and storage flows.
-func (m *MockArtifactStore) Put(ctx context.Context, content string, kind domain.ArtifactKind, key string) (domain.ArtifactRef, error) {
+func (m *MockArtifactStore) Put(_ context.Context, content string, kind domain.ArtifactKind, key string) (domain.ArtifactRef, error) {
 	if key == "" {
-		return domain.ArtifactRef{}, ErrArtifactKeyEmpty
+		return domain.ArtifactRef{}, llm.ErrArtifactKeyEmpty
 	}
 
 	m.content[key] = content
@@ -61,9 +62,9 @@ func (m *MockArtifactStore) Put(ctx context.Context, content string, kind domain
 // Exists checks predefined content availability in mock storage.
 // Enables testing of existence validation logic without requiring
 // actual storage backend availability or network connectivity.
-func (m *MockArtifactStore) Exists(ctx context.Context, ref domain.ArtifactRef) (bool, error) {
+func (m *MockArtifactStore) Exists(_ context.Context, ref domain.ArtifactRef) (bool, error) {
 	if ref.Key == "" {
-		return false, ErrArtifactKeyEmpty
+		return false, llm.ErrArtifactKeyEmpty
 	}
 
 	_, exists := m.content[ref.Key]

@@ -9,7 +9,7 @@ import (
 
 // ErrorType categorizes LLM operation failures for retry classification.
 // Types determine whether operations should be retried and with what backoff strategy,
-// enabling resilient handling of transient vs. permanent failures.
+// Enabling resilient handling of transient vs. permanent failures.
 type ErrorType string
 
 const (
@@ -81,6 +81,16 @@ var (
 
 	// ErrMaxRetriesExceeded indicates maximum retry attempts exceeded.
 	ErrMaxRetriesExceeded = errors.New("maximum retries exceeded")
+
+	// Usage mapping errors.
+	ErrUnsupportedUsageType       = errors.New("unsupported usage type")
+	ErrUnsupportedProvider        = errors.New("unsupported provider for usage mapping")
+	ErrUsageNil                   = errors.New("usage is nil")
+	ErrNegativePromptTokens       = errors.New("negative prompt tokens")
+	ErrNegativeCompletionTokens   = errors.New("negative completion tokens")
+	ErrNegativeTotalTokens        = errors.New("negative total tokens")
+	ErrInconsistentTokenCounts    = errors.New("inconsistent token counts")
+	ErrSuspiciouslyHighTokenCount = errors.New("suspiciously high token count")
 )
 
 // WorkflowError provides comprehensive error context for workflow operations.
@@ -159,7 +169,7 @@ func (e *ProviderError) IsRetryable() bool {
 
 // RateLimitError provides detailed rate limit context for backoff calculation.
 // Includes retry timing, limit details, and local vs. remote limit distinction
-// to enable optimal backoff strategies and quota management.
+// To enable optimal backoff strategies and quota management.
 type RateLimitError struct {
 	Provider   string `json:"provider"`
 	RetryAfter int    `json:"retry_after"` // Seconds to wait before retry
@@ -243,6 +253,23 @@ func ClassifyLLMError(err error) *WorkflowError {
 	}
 
 	// Check for strongly-typed errors first.
+	if workflowErr := classifyTypedErrors(err); workflowErr != nil {
+		return workflowErr
+	}
+
+	// Check for sentinel errors using errors.Is.
+	if workflowErr := classifySentinelErrors(err); workflowErr != nil {
+		return workflowErr
+	}
+
+	// Fallback to string pattern matching for untyped errors.
+	return classifyStringPatternErrors(err)
+}
+
+// classifyTypedErrors handles strongly-typed error classification.
+// Processes ProviderError, RateLimitError, CircuitBreakerError, ValidationError,
+// and PricingError types with appropriate retry guidance and context details.
+func classifyTypedErrors(err error) *WorkflowError {
 	var providerErr *ProviderError
 	if errors.As(err, &providerErr) {
 		return &WorkflowError{
@@ -320,7 +347,13 @@ func ClassifyLLMError(err error) *WorkflowError {
 		}
 	}
 
-	// Check for sentinel errors using errors.Is.
+	return nil
+}
+
+// classifySentinelErrors handles sentinel error classification.
+// Processes sentinel errors using errors.Is for rate limits, circuit breakers,
+// provider availability, pricing, and retry limits with appropriate retry guidance.
+func classifySentinelErrors(err error) *WorkflowError {
 	switch {
 	case errors.Is(err, ErrRateLimitExceeded):
 		return &WorkflowError{
@@ -360,11 +393,18 @@ func ClassifyLLMError(err error) *WorkflowError {
 			Message:   err.Error(),
 			Code:      "MAX_RETRIES",
 			Retryable: false,
+			Details:   map[string]any{"original_error": err.Error()},
 			Cause:     err,
 		}
 	}
 
-	// Fallback to string pattern matching for untyped errors.
+	return nil
+}
+
+// classifyStringPatternErrors handles untyped error classification.
+// Performs string pattern matching on error messages to classify
+// rate limits, timeouts, authentication, permission, quota, and network errors.
+func classifyStringPatternErrors(err error) *WorkflowError {
 	errMsg := strings.ToLower(err.Error())
 
 	switch {

@@ -6,6 +6,41 @@ import (
 	"time"
 )
 
+// HTTP and connection constants.
+const (
+	DefaultMaxIdleConns        = 100
+	DefaultIdleTimeoutSeconds  = 90
+	DefaultTLSTimeoutSeconds   = 10
+	DefaultHTTPTimeoutSeconds  = 30
+	ServerErrorStatusThreshold = 500
+)
+
+// Retry and circuit breaker constants.
+const (
+	DefaultMaxAttempts       = 3
+	DefaultMaxElapsedTime    = 45 * time.Second
+	DefaultInitialInterval   = 250 * time.Millisecond
+	DefaultMaxInterval       = 5 * time.Second
+	DefaultBackoffMultiplier = 2.0
+	DefaultFailureThreshold  = 5
+	DefaultSuccessThreshold  = 2
+	DefaultOpenTimeout       = 30 * time.Second
+)
+
+// Rate limiting constants.
+const (
+	DefaultTokensPerSecond = 10
+	DefaultBurstSize       = 20
+	DefaultConnectTimeout  = 5 * time.Second
+)
+
+// Cache and pricing constants.
+const (
+	DefaultCacheTTL    = 24 * time.Hour
+	DefaultMetricsPort = 9090
+	PricingValidFor    = 24 * time.Hour
+)
+
 // Config holds comprehensive configuration for the LLM client.
 // Includes provider settings, resilience parameters, observability options,
 // and feature flags for production-ready LLM operations.
@@ -152,36 +187,36 @@ type FeatureFlags struct {
 // suitable for production workloads without additional configuration.
 func DefaultConfig() *Config {
 	return &Config{
-		HTTPTimeout:   30 * time.Second,
+		HTTPTimeout:   DefaultHTTPTimeoutSeconds * time.Second,
 		ArtifactStore: NewInMemoryArtifactStore(),
 		Retry: RetryConfig{
-			MaxAttempts:     3,
-			MaxElapsedTime:  45 * time.Second,
-			InitialInterval: 250 * time.Millisecond,
-			MaxInterval:     5 * time.Second,
-			Multiplier:      2.0,
+			MaxAttempts:     DefaultMaxAttempts,
+			MaxElapsedTime:  DefaultMaxElapsedTime,
+			InitialInterval: DefaultInitialInterval,
+			MaxInterval:     DefaultMaxInterval,
+			Multiplier:      DefaultBackoffMultiplier,
 			UseJitter:       true,
 		},
 		CircuitBreaker: CircuitBreakerConfig{
-			FailureThreshold: 5,
-			SuccessThreshold: 2,
-			OpenTimeout:      30 * time.Second,
+			FailureThreshold: DefaultFailureThreshold,
+			SuccessThreshold: DefaultSuccessThreshold,
+			OpenTimeout:      DefaultOpenTimeout,
 			HalfOpenProbes:   1,
 		},
 		RateLimit: RateLimitConfig{
 			Local: LocalRateLimitConfig{
-				TokensPerSecond: 10,
-				BurstSize:       20,
+				TokensPerSecond: DefaultTokensPerSecond,
+				BurstSize:       DefaultBurstSize,
 				Enabled:         true,
 			},
 			Global: GlobalRateLimitConfig{
 				Enabled:        true,
-				ConnectTimeout: 5 * time.Second,
+				ConnectTimeout: DefaultConnectTimeout,
 			},
 		},
 		Cache: CacheConfig{
 			Enabled:     true,
-			TTL:         24 * time.Hour,
+			TTL:         DefaultCacheTTL,
 			SuccessOnly: true,
 		},
 		Pricing: PricingConfig{
@@ -191,7 +226,7 @@ func DefaultConfig() *Config {
 		},
 		Observability: ObservabilityConfig{
 			MetricsEnabled: true,
-			MetricsPort:    9090,
+			MetricsPort:    DefaultMetricsPort,
 			LogLevel:       "info",
 			LogFormat:      "json",
 			RedactPrompts:  true,

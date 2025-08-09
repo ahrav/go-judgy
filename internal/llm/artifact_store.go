@@ -51,7 +51,7 @@ func NewInMemoryArtifactStore() *InMemoryArtifactStore {
 // Get retrieves stored content from in-memory storage.
 // Validates reference key and returns content or appropriate error
 // for missing artifacts or invalid references.
-func (s *InMemoryArtifactStore) Get(ctx context.Context, ref domain.ArtifactRef) (string, error) {
+func (s *InMemoryArtifactStore) Get(_ context.Context, ref domain.ArtifactRef) (string, error) {
 	if ref.Key == "" {
 		return "", ErrArtifactKeyEmpty
 	}
@@ -70,7 +70,9 @@ func (s *InMemoryArtifactStore) Get(ctx context.Context, ref domain.ArtifactRef)
 // Put stores content in memory and creates artifact reference.
 // Calculates content size and creates reference with metadata
 // for consistent artifact management and retrieval.
-func (s *InMemoryArtifactStore) Put(ctx context.Context, content string, kind domain.ArtifactKind, key string) (domain.ArtifactRef, error) {
+func (s *InMemoryArtifactStore) Put(
+	_ context.Context, content string, kind domain.ArtifactKind, key string,
+) (domain.ArtifactRef, error) {
 	if key == "" {
 		return domain.ArtifactRef{}, ErrArtifactKeyEmpty
 	}
@@ -92,7 +94,7 @@ func (s *InMemoryArtifactStore) Put(ctx context.Context, content string, kind do
 // Exists checks artifact presence in memory storage.
 // Provides efficient existence validation without content retrieval
 // to support caching decisions and workflow optimization.
-func (s *InMemoryArtifactStore) Exists(ctx context.Context, ref domain.ArtifactRef) (bool, error) {
+func (s *InMemoryArtifactStore) Exists(_ context.Context, ref domain.ArtifactRef) (bool, error) {
 	if ref.Key == "" {
 		return false, ErrArtifactKeyEmpty
 	}

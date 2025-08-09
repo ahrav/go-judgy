@@ -20,6 +20,12 @@ import (
 	"github.com/ahrav/go-judgy/internal/domain"
 )
 
+// Token and scoring constants.
+const (
+	DefaultMaxTokens          = 1000
+	DefaultScoringTemperature = 0.1
+)
+
 // Client provides high-level LLM operations with comprehensive resilience patterns.
 // Maps domain types to provider-specific requests while handling caching, circuit breaking,
 // rate limiting, retry logic, cost tracking, and observability for production reliability.
@@ -65,9 +71,9 @@ func NewClient(cfg *Config) (Client, error) {
 	if httpClient == nil {
 		transport := &http.Transport{
 			Proxy:                 http.ProxyFromEnvironment,
-			MaxIdleConns:          100,
-			IdleConnTimeout:       90 * time.Second,
-			TLSHandshakeTimeout:   10 * time.Second,
+			MaxIdleConns:          DefaultMaxIdleConns,
+			IdleConnTimeout:       DefaultIdleTimeoutSeconds * time.Second,
+			TLSHandshakeTimeout:   DefaultTLSTimeoutSeconds * time.Second,
 			ExpectContinueTimeout: 1 * time.Second,
 		}
 		httpClient = &http.Client{
@@ -139,7 +145,7 @@ func (c *client) Generate(
 	}
 
 	for i := 0; i < in.NumAnswers; i++ {
-		req := &LLMRequest{
+		req := &Request{
 			Operation:     OpGeneration,
 			Provider:      in.Config.Provider,
 			Model:         in.Config.Model,
@@ -188,15 +194,15 @@ func (c *client) Score(ctx context.Context, in domain.ScoreAnswersInput) (*domai
 	}
 
 	for _, answer := range in.Answers {
-		req := &LLMRequest{
+		req := &Request{
 			Operation:     OpScoring,
 			Provider:      in.Config.Provider,
 			Model:         in.Config.Model,
 			TenantID:      extractTenantID(ctx),
 			Question:      in.Question,
 			Answers:       []domain.Answer{answer},
-			MaxTokens:     1000, // Scoring typically needs less tokens
-			Temperature:   0.1,  // Low temperature for consistent scoring
+			MaxTokens:     DefaultMaxTokens,          // Scoring typically needs less tokens
+			Temperature:   DefaultScoringTemperature, // Low temperature for consistent scoring
 			Timeout:       time.Duration(in.Config.Timeout) * time.Second,
 			TraceID:       extractTraceID(ctx),
 			ArtifactStore: c.artifactStore,

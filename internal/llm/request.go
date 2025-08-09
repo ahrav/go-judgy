@@ -21,10 +21,10 @@ const (
 	OpScoring OperationType = "scoring"
 )
 
-// LLMRequest represents a normalized request across all LLM providers.
+// Request represents a normalized request across all LLM providers.
 // Contains all information needed for provider-specific HTTP request construction,
 // middleware processing, and response correlation with proper tracing context.
-type LLMRequest struct {
+type Request struct {
 	// Operation type affects routing, metrics, and rate limiting.
 	Operation OperationType `json:"operation"`
 
@@ -61,10 +61,10 @@ type LLMRequest struct {
 	ArtifactStore ArtifactStore `json:"-"`
 }
 
-// Request represents normalized output from any LLM provider.
+// LLMResponse represents normalized output from any LLM provider.
 // Provides consistent response structure across providers that activities
 // translate into domain-specific types with usage tracking and cost attribution.
-type Request struct {
+type LLMResponse struct {
 	// Content is the generated text or JSON for scoring.
 	Content string `json:"content"`
 

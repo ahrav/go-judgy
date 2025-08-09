@@ -1,9 +1,5 @@
 package llm
 
-import (
-	"context"
-)
-
 // Middleware factory functions for LLM request processing pipeline.
 // This file provides middleware stubs and implemented factories to support
 // caching, rate limiting, circuit breaking, retry logic, pricing, and observability.
@@ -11,53 +7,29 @@ import (
 // NewCacheMiddleware creates a response caching middleware for LLM operations.
 // Reduces API costs and latency by caching successful responses with
 // idempotency key-based lookup. Full implementation in cache.go.
-func NewCacheMiddleware(_ CacheConfig) (Middleware, error) {
-	// TODO: Implement in cache.go.
-	return func(next Handler) Handler {
-		return HandlerFunc(func(ctx context.Context, req *LLMRequest) (*Request, error) {
-			// Passthrough for now.
-			return next.Handle(ctx, req)
-		})
-	}, nil
+func NewCacheMiddleware(cfg CacheConfig) (Middleware, error) {
+	return NewCacheMiddlewareWithRedis(cfg, nil)
 }
 
 // NewRateLimitMiddleware creates a rate limiting middleware for API protection.
 // Enforces request rate limits per provider/model to prevent quota exhaustion
 // and API abuse. Full implementation in ratelimit.go.
-func NewRateLimitMiddleware(_ RateLimitConfig) (Middleware, error) {
-	// TODO: Implement in ratelimit.go.
-	return func(next Handler) Handler {
-		return HandlerFunc(func(ctx context.Context, req *LLMRequest) (*Request, error) {
-			// Passthrough for now.
-			return next.Handle(ctx, req)
-		})
-	}, nil
+func NewRateLimitMiddleware(cfg RateLimitConfig) (Middleware, error) {
+	return NewRateLimitMiddlewareWithRedis(cfg, nil)
 }
 
 // NewCircuitBreakerMiddleware creates a circuit breaker for provider protection.
 // Implements fail-fast behavior during provider outages to prevent cascading
 // failures and reduce unnecessary API calls. Full implementation in circuit_breaker.go.
-func NewCircuitBreakerMiddleware(_ CircuitBreakerConfig) Middleware {
-	// TODO: Implement in circuit_breaker.go.
-	return func(next Handler) Handler {
-		return HandlerFunc(func(ctx context.Context, req *LLMRequest) (*Request, error) {
-			// Passthrough for now.
-			return next.Handle(ctx, req)
-		})
-	}
+func NewCircuitBreakerMiddleware(cfg CircuitBreakerConfig) Middleware {
+	return NewCircuitBreakerMiddlewareWithRedis(cfg, nil)
 }
 
 // NewRetryMiddleware creates a retry middleware for transient failure handling.
 // Implements intelligent retry logic with exponential backoff for rate limits,
 // timeouts, and provider errors. Full implementation in retry.go.
-func NewRetryMiddleware(_ RetryConfig) Middleware {
-	// TODO: Implement in retry.go.
-	return func(next Handler) Handler {
-		return HandlerFunc(func(ctx context.Context, req *LLMRequest) (*Request, error) {
-			// Passthrough for now.
-			return next.Handle(ctx, req)
-		})
-	}
+func NewRetryMiddleware(cfg RetryConfig) Middleware {
+	return NewRetryMiddlewareWithConfig(cfg)
 }
 
 // NewPricingMiddleware creates cost tracking middleware with fail-closed pricing.

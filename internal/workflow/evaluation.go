@@ -69,7 +69,7 @@ func EvaluationWorkflow(
 	// 2. Activity execution (GenerateAnswers → ScoreAnswers → AggregateScores)
 	// 3. Verdict construction and validation
 	return nil, temporal.NewNonRetryableApplicationError(
-		"EvaluationWorkflow not implemented (Story 1.2 contract only)",
+		"workflow.EvaluationWorkflow not implemented (Story 1.2 contract only)",
 		"NotImplemented",
 		nil,
 	)

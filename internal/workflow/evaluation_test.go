@@ -1,4 +1,4 @@
-package workflow
+package workflow_test
 
 import (
 	"testing"
@@ -9,6 +9,7 @@ import (
 	"go.temporal.io/sdk/testsuite"
 
 	"github.com/ahrav/go-judgy/internal/domain"
+	"github.com/ahrav/go-judgy/internal/workflow"
 )
 
 // TestEvaluationWorkflow verifies that EvaluationWorkflow handles validation,
@@ -25,7 +26,7 @@ func TestEvaluationWorkflow(t *testing.T) {
 		req := createValidEvaluationRequest()
 
 		// Execute the workflow function directly
-		env.ExecuteWorkflow(EvaluationWorkflow, req)
+		env.ExecuteWorkflow(workflow.EvaluationWorkflow, req)
 
 		// Verify workflow completed
 		require.True(t, env.IsWorkflowCompleted(), "workflow should complete")
@@ -38,7 +39,7 @@ func TestEvaluationWorkflow(t *testing.T) {
 		var appErr *temporal.ApplicationError
 		require.ErrorAs(t, err, &appErr, "error should be ApplicationError")
 		assert.Equal(t, "NotImplemented", appErr.Type(), "error type should be NotImplemented")
-		assert.Contains(t, appErr.Error(), "EvaluationWorkflow not implemented", "error should indicate not implemented")
+		assert.Contains(t, appErr.Error(), "workflow.EvaluationWorkflow not implemented", "error should indicate not implemented")
 		assert.True(t, appErr.NonRetryable(), "error should be non-retryable")
 	})
 
@@ -50,7 +51,7 @@ func TestEvaluationWorkflow(t *testing.T) {
 		req := domain.EvaluationRequest{} // Empty request to test validation
 
 		// Execute the workflow
-		env.ExecuteWorkflow(EvaluationWorkflow, req)
+		env.ExecuteWorkflow(workflow.EvaluationWorkflow, req)
 
 		// Verify workflow completed with error
 		require.True(t, env.IsWorkflowCompleted(), "workflow should complete")
@@ -75,7 +76,7 @@ func TestEvaluationWorkflow(t *testing.T) {
 			env := testSuite.NewTestWorkflowEnvironment()
 			defer env.AssertExpectations(t)
 
-			env.ExecuteWorkflow(EvaluationWorkflow, req)
+			env.ExecuteWorkflow(workflow.EvaluationWorkflow, req)
 			require.True(t, env.IsWorkflowCompleted(), "workflow should complete on attempt %d", i+1)
 
 			err := env.GetWorkflowError()
@@ -97,7 +98,7 @@ func TestEvaluationWorkflow(t *testing.T) {
 		req := createValidEvaluationRequest()
 
 		// Execute with a reasonable timeout
-		env.ExecuteWorkflow(EvaluationWorkflow, req)
+		env.ExecuteWorkflow(workflow.EvaluationWorkflow, req)
 		require.True(t, env.IsWorkflowCompleted(), "workflow should complete without timeout")
 
 		err := env.GetWorkflowError()
@@ -123,7 +124,7 @@ func TestEvaluationWorkflowDeterminism(t *testing.T) {
 		// Execute the workflow multiple times
 		for i := 0; i < 5; i++ {
 			env := testSuite.NewTestWorkflowEnvironment()
-			env.ExecuteWorkflow(EvaluationWorkflow, req)
+			env.ExecuteWorkflow(workflow.EvaluationWorkflow, req)
 			results = append(results, env.GetWorkflowError())
 			env.AssertExpectations(t)
 		}
@@ -137,7 +138,7 @@ func TestEvaluationWorkflowDeterminism(t *testing.T) {
 }
 
 // createValidEvaluationRequest creates a minimal valid evaluation request for testing
-// EvaluationWorkflow stub behavior. Returns test data that satisfies domain
+// workflow.EvaluationWorkflow stub behavior. Returns test data that satisfies domain
 // validation requirements and workflow input contracts.
 func createValidEvaluationRequest() domain.EvaluationRequest {
 	// Create a minimal valid request based on domain.EvaluationRequest structure
