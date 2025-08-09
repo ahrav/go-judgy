@@ -61,10 +61,10 @@ type Request struct {
 	ArtifactStore ArtifactStore `json:"-"`
 }
 
-// LLMResponse represents normalized output from any LLM provider.
+// Response represents normalized output from any LLM provider.
 // Provides consistent response structure across providers that activities
 // translate into domain-specific types with usage tracking and cost attribution.
-type LLMResponse struct {
+type Response struct {
 	// Content is the generated text or JSON for scoring.
 	Content string `json:"content"`
 

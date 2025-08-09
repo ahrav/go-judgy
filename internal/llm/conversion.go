@@ -11,7 +11,7 @@ import (
 )
 
 // responseToAnswer converts an LLM response to a domain Answer.
-func responseToAnswer(resp *LLMResponse, req *Request) *domain.Answer {
+func responseToAnswer(resp *Response, req *Request) *domain.Answer {
 	id := uuid.New().String()
 
 	contentRef := domain.ArtifactRef{
@@ -51,7 +51,7 @@ func responseToAnswer(resp *LLMResponse, req *Request) *domain.Answer {
 }
 
 // responseToScore converts an LLM response to a domain Score.
-func responseToScore(resp *LLMResponse, answerID string, req *Request, disableJSONRepair bool) (*domain.Score, error) {
+func responseToScore(resp *Response, answerID string, req *Request, disableJSONRepair bool) (*domain.Score, error) {
 	scoreData, err := ValidateAndRepairScore(resp.Content, !disableJSONRepair)
 	if err != nil {
 		return nil, fmt.Errorf("invalid score response: %w", err)

@@ -85,6 +85,9 @@ linters:
       scope: declarations
       exclude:
         - "Check that the.*"
+        - "ErrorType categorizes.*"
+        - "IsRetryable determines.*"
+        - "RateLimitError provides.*"
       period: true
       capital: true
 

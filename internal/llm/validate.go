@@ -272,7 +272,7 @@ func ValidateGenerationResponse(content string) error {
 // ValidateProviderResponse validates LLM provider response structure.
 // Checks response completeness, content validity, and token count consistency
 // to ensure provider responses meet minimum quality requirements.
-func ValidateProviderResponse(resp *LLMResponse) error {
+func ValidateProviderResponse(resp *Response) error {
 	if resp == nil {
 		return ErrNilResponse
 	}

@@ -25,7 +25,7 @@ type mockLLMClient struct {
 // Generate simulates LLM answer generation with controllable error behavior.
 // Returns configurable errors or minimal valid responses for testing activity logic.
 func (m *mockLLMClient) Generate(
-	_ context.Context, in domain.GenerateAnswersInput,
+	_ context.Context, _ domain.GenerateAnswersInput,
 ) (*domain.GenerateAnswersOutput, error) {
 	m.generateCalls++
 
@@ -56,7 +56,7 @@ func (m *mockLLMClient) Generate(
 
 // Score simulates LLM answer scoring with controllable error behavior.
 // Returns configurable errors or minimal valid scores for testing activity logic.
-func (m *mockLLMClient) Score(ctx context.Context, in domain.ScoreAnswersInput) (*domain.ScoreAnswersOutput, error) {
+func (m *mockLLMClient) Score(_ context.Context, in domain.ScoreAnswersInput) (*domain.ScoreAnswersOutput, error) {
 	m.scoreCalls++
 
 	if m.scoreReturnsError {

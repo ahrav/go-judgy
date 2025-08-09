@@ -81,7 +81,7 @@ func NewLoggingMiddleware(config ObservabilityConfig, logger *slog.Logger, metri
 // Captures request start/completion events, measures latency, records usage metrics,
 // and provides error classification for monitoring and alerting.
 func (m *LoggingMiddleware) Middleware(next Handler) Handler {
-	return HandlerFunc(func(ctx context.Context, req *Request) (*LLMResponse, error) {
+	return HandlerFunc(func(ctx context.Context, req *Request) (*Response, error) {
 		requestID := req.TraceID
 		if requestID == "" {
 			requestID = uuid.New().String()
@@ -196,7 +196,7 @@ func (m *LoggingMiddleware) handleError(
 func (m *LoggingMiddleware) handleSuccess(
 	_ context.Context,
 	req *Request,
-	resp *LLMResponse,
+	resp *Response,
 	requestID string,
 	duration time.Duration,
 	baseTags map[string]string,

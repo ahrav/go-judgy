@@ -12,15 +12,15 @@ import (
 // Core abstraction enabling request preprocessing, response postprocessing,
 // and cross-cutting concerns like caching, rate limiting, and observability.
 type Handler interface {
-	Handle(ctx context.Context, req *Request) (*LLMResponse, error)
+	Handle(ctx context.Context, req *Request) (*Response, error)
 }
 
 // HandlerFunc adapts a function to the Handler interface.
 // Enables middleware composition with function-based handlers.
-type HandlerFunc func(context.Context, *Request) (*LLMResponse, error)
+type HandlerFunc func(context.Context, *Request) (*Response, error)
 
 // Handle implements the Handler interface.
-func (f HandlerFunc) Handle(ctx context.Context, req *Request) (*LLMResponse, error) {
+func (f HandlerFunc) Handle(ctx context.Context, req *Request) (*Response, error) {
 	return f(ctx, req)
 }
 
@@ -46,7 +46,7 @@ type httpHandler struct {
 }
 
 // Handle implements Handler by making HTTP requests to providers.
-func (h *httpHandler) Handle(ctx context.Context, req *Request) (*LLMResponse, error) {
+func (h *httpHandler) Handle(ctx context.Context, req *Request) (*Response, error) {
 	// Select provider adapter.
 	adapter, err := h.router.Pick(req.Provider, req.Model)
 	if err != nil {

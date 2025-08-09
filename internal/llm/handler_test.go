@@ -11,25 +11,25 @@ import (
 
 // MockHandler provides predictable responses for testing Handler interface.
 type MockHandler struct {
-	response *llm.LLMResponse
+	response *llm.Response
 	err      error
 }
 
-func NewMockHandler(response *llm.LLMResponse, err error) *MockHandler {
+func NewMockHandler(response *llm.Response, err error) *MockHandler {
 	return &MockHandler{
 		response: response,
 		err:      err,
 	}
 }
 
-func (m *MockHandler) Handle(_ context.Context, req *llm.Request) (*llm.LLMResponse, error) {
+func (m *MockHandler) Handle(_ context.Context, _ *llm.Request) (*llm.Response, error) {
 	return m.response, m.err
 }
 
 func TestHandler_Interface(t *testing.T) {
 	ctx := context.Background()
 
-	expectedResponse := &llm.LLMResponse{
+	expectedResponse := &llm.Response{
 		Content:      "test response",
 		FinishReason: domain.FinishStop,
 		Usage: llm.NormalizedUsage{
@@ -53,7 +53,7 @@ func TestHandler_Interface(t *testing.T) {
 		Timeout:     30 * time.Second,
 	}
 
-	// Test that Handler.Handle returns LLMResponse (not Request)
+	// Test that Handler.Handle returns Response (not Request)
 	resp, err := handler.Handle(ctx, req)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
@@ -80,7 +80,7 @@ func TestHandler_Interface(t *testing.T) {
 func TestHandlerFunc_Interface(t *testing.T) {
 	ctx := context.Background()
 
-	expectedResponse := &llm.LLMResponse{
+	expectedResponse := &llm.Response{
 		Content:      "handlerfunc response",
 		FinishReason: domain.FinishStop,
 		Usage: llm.NormalizedUsage{
@@ -90,7 +90,7 @@ func TestHandlerFunc_Interface(t *testing.T) {
 	}
 
 	// Test HandlerFunc implements Handler interface correctly
-	handlerFunc := llm.HandlerFunc(func(_ context.Context, req *llm.Request) (*llm.LLMResponse, error) {
+	handlerFunc := llm.HandlerFunc(func(_ context.Context, _ *llm.Request) (*llm.Response, error) {
 		return expectedResponse, nil
 	})
 
@@ -113,7 +113,7 @@ func TestHandlerFunc_Interface(t *testing.T) {
 func TestChain_MiddlewareExecution(t *testing.T) {
 	ctx := context.Background()
 
-	baseResponse := &llm.LLMResponse{
+	baseResponse := &llm.Response{
 		Content:      "base response",
 		FinishReason: domain.FinishStop,
 		Usage:        llm.NormalizedUsage{TotalTokens: 10},
@@ -123,7 +123,7 @@ func TestChain_MiddlewareExecution(t *testing.T) {
 
 	// Create middleware that modifies the response
 	testMiddleware := func(next llm.Handler) llm.Handler {
-		return llm.HandlerFunc(func(_ context.Context, req *llm.Request) (*llm.LLMResponse, error) {
+		return llm.HandlerFunc(func(_ context.Context, req *llm.Request) (*llm.Response, error) {
 			resp, err := next.Handle(ctx, req)
 			if err != nil {
 				return nil, err
