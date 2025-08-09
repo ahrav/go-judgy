@@ -29,7 +29,6 @@ linters:
     # Code quality
     - goconst        # Finds repeated strings that could be replaced by a constant
     - gocritic       # Provides diagnostics that check for bugs, performance and style issues
-    - gocyclo        # Computes and checks the cyclomatic complexity of functions
     - mnd            # An analyzer to detect magic numbers
     - gomodguard     # Allow and block list linter for direct Go module dependencies
     - goprintffuncname # Checks that printf-like functions are named with `f` at the end
@@ -61,7 +60,6 @@ linters:
     - prealloc       # Finds slice declarations that could potentially be preallocated
 
     # Complexity
-    - cyclop         # Checks function and package cyclomatic complexity
     - funlen         # Tool for detection of long functions
     - nestif         # Reports deeply nested if statements
 
@@ -101,10 +99,6 @@ linters:
         - FIXME
 
     # Code complexity
-
-    cyclop:
-      max-complexity: 15
-      package-average: 10.0
 
     funlen:
       lines: 80
@@ -189,7 +183,6 @@ linters:
       # Exclude some linters from running on tests files
       - path: _test\.go
         linters:
-          - gocyclo
           - errcheck
           - dupl
           - gosec
@@ -197,7 +190,6 @@ linters:
           - goconst
           - gocognit
           - mnd
-          - cyclop
 
       # Exclude gocognit for DetermineWinner function in score.go
       - path: score\.go

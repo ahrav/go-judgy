@@ -5,6 +5,7 @@ import (
 	sdkworker "go.temporal.io/sdk/worker"
 
 	"github.com/ahrav/go-judgy/internal/activity"
+	"github.com/ahrav/go-judgy/internal/llm"
 	"github.com/ahrav/go-judgy/internal/workflow"
 )
 
@@ -12,9 +13,11 @@ import (
 // This function must be called during worker initialization before starting
 // the worker. The registration is not thread-safe and should only be called once
 // during application startup.
-func RegisterAll(w sdkworker.Worker) {
+func RegisterAll(w sdkworker.Worker, llmClient llm.Client) {
+	activities := activity.NewActivities(llmClient)
+
 	w.RegisterWorkflow(workflow.EvaluationWorkflow)
-	w.RegisterActivity(activity.GenerateAnswers)
-	w.RegisterActivity(activity.ScoreAnswers)
+	w.RegisterActivity(activities.GenerateAnswers)
+	w.RegisterActivity(activities.ScoreAnswers)
 	w.RegisterActivity(activity.AggregateScores)
 }

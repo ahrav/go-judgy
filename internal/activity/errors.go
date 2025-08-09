@@ -112,3 +112,11 @@ const (
 func nonRetryable(tag string, cause error, msg string) error {
 	return temporal.NewNonRetryableApplicationError(msg, tag, cause)
 }
+
+// retryable wraps an error as a Temporal application error that can be retried.
+// This helper standardizes error creation for transient failures like network issues,
+// rate limits, and provider unavailability that should trigger automatic retries.
+// The tag parameter categorizes the error type for monitoring and debugging.
+func retryable(tag string, cause error, msg string) error {
+	return temporal.NewApplicationError(msg, tag, cause)
+}

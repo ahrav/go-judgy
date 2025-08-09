@@ -17,17 +17,20 @@ import (
 // parameter handling, and consistent behavior required for Temporal activity execution.
 func TestScoreAnswers(t *testing.T) {
 	t.Run("returns not implemented error", func(t *testing.T) {
+		// Create activities with mock client that returns "not implemented" error.
+		activities := NewActivities(newMockLLMClient())
+
 		ctx := context.Background()
 		input := createValidScoreAnswersInput()
 
-		// Execute the function
-		result, err := ScoreAnswers(ctx, input)
+		// Execute the function.
+		result, err := activities.ScoreAnswers(ctx, input)
 
-		// Verify it returns error and no result
+		// Verify it returns error and no result.
 		require.Error(t, err, "ScoreAnswers should return error")
 		assert.Nil(t, result, "ScoreAnswers should return nil result")
 
-		// Verify it's a non-retryable application error
+		// Verify it's a non-retryable application error.
 		var appErr *temporal.ApplicationError
 		require.ErrorAs(t, err, &appErr, "error should be ApplicationError")
 		assert.Equal(t, "ScoreAnswers", appErr.Type(), "error type should be ScoreAnswers")
@@ -36,35 +39,41 @@ func TestScoreAnswers(t *testing.T) {
 	})
 
 	t.Run("ignores context and input parameters", func(t *testing.T) {
-		// Test that the stub function ignores its parameters as expected
-		// This verifies the function signature is correct
+		// Create activities with mock client for parameter testing.
+		activities := NewActivities(newMockLLMClient())
 
-		// Test with nil context (should not panic)
-		result1, err1 := ScoreAnswers(context.TODO(), domain.ScoreAnswersInput{})
+		// Test that the stub function ignores its parameters as expected.
+		// This verifies the function signature is correct.
+
+		// Test with nil context (should not panic).
+		result1, err1 := activities.ScoreAnswers(context.TODO(), domain.ScoreAnswersInput{})
 		require.Error(t, err1, "should return error with nil context")
 		assert.Nil(t, result1, "should return nil result")
 
-		// Test with empty input (should not panic)
+		// Test with empty input (should not panic).
 		ctx := context.Background()
-		result2, err2 := ScoreAnswers(ctx, domain.ScoreAnswersInput{})
+		result2, err2 := activities.ScoreAnswers(ctx, domain.ScoreAnswersInput{})
 		require.Error(t, err2, "should return error with empty input")
 		assert.Nil(t, result2, "should return nil result")
 
-		// Both calls should return the same error message
+		// Both calls should return the same error message.
 		assert.Equal(t, err1.Error(), err2.Error(), "error should be consistent regardless of input")
 	})
 
 	t.Run("error contains expected information", func(t *testing.T) {
+		// Create activities with mock client for error validation.
+		activities := NewActivities(newMockLLMClient())
+
 		ctx := context.Background()
 		input := createValidScoreAnswersInput()
 
-		_, err := ScoreAnswers(ctx, input)
+		_, err := activities.ScoreAnswers(ctx, input)
 		require.Error(t, err, "should return error")
 
-		// Verify error chain
+		// Verify error chain.
 		assert.ErrorIs(t, err, ErrNotImplemented, "error should wrap ErrNotImplemented")
 
-		// Verify error message contains function name and implementation status
+		// Verify error message contains function name and implementation status.
 		errMsg := err.Error()
 		assert.Contains(t, errMsg, "ScoreAnswers", "error message should contain function name")
 		assert.Contains(t, errMsg, "not implemented", "error message should indicate not implemented")
@@ -76,12 +85,12 @@ func TestScoreAnswers(t *testing.T) {
 // validation requirements without requiring full implementation logic.
 func createValidScoreAnswersInput() domain.ScoreAnswersInput {
 	// Since this is Story 1.2 and the function is just a stub,
-	// we don't need a fully valid input - just something that compiles
+	// we don't need a fully valid input - just something that compiles.
 	return domain.ScoreAnswersInput{
-		Question: "What is 2+2?", // Simple test question
+		Question: "What is 2+2?", // Simple test question.
 		Answers: []domain.Answer{
 			{
-				ID: "550e8400-e29b-41d4-a716-446655440000", // Test answer identifier
+				ID: "550e8400-e29b-41d4-a716-446655440000", // Test answer identifier.
 				ContentRef: domain.ArtifactRef{
 					Key:  "answers/test.txt",
 					Size: 4,
@@ -89,6 +98,6 @@ func createValidScoreAnswersInput() domain.ScoreAnswersInput {
 				},
 			},
 		},
-		Config: domain.DefaultEvalConfig(), // Standard evaluation configuration
+		Config: domain.DefaultEvalConfig(), // Standard evaluation configuration.
 	}
 }

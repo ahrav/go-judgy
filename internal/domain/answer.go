@@ -212,6 +212,10 @@ type GenerateAnswersOutput struct {
 	// CallsMade counts the number of LLM API requests made during generation.
 	CallsMade int64 `json:"calls_made" validate:"min=0"`
 
+	// CostCents represents the total cost of generation in cents.
+	// Used for budget reconciliation via BudgetClient.CommitSync.
+	CostCents Cents `json:"cost_cents" validate:"min=0"`
+
 	// Error contains the failure reason if no answers were successfully generated.
 	Error string `json:"error,omitempty"`
 }
