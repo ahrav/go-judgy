@@ -46,21 +46,31 @@ build: ## Build all binaries (worker and cli)
 	@echo "Binaries built successfully"
 
 .PHONY: test
-test: ## Run all tests
-	@echo "Running tests..."
-	@GOEXPERIMENT=synctest $(GOTEST) $(TEST_FLAGS) ./...
+test: ## Run unit tests (excludes integration tests)
+	@echo "Running unit tests..."
+	@GOEXPERIMENT=synctest $(GOTEST) $(TEST_FLAGS) -tags='!integration' ./...
 
 .PHONY: test-race
-test-race: ## Run tests with race detection
-	@echo "Running tests with race detection..."
-	@GOEXPERIMENT=synctest $(GOTEST) $(TEST_FLAGS) $(RACE_FLAGS) ./...
+test-race: ## Run unit tests with race detection (excludes integration tests)
+	@echo "Running unit tests with race detection..."
+	@GOEXPERIMENT=synctest $(GOTEST) $(TEST_FLAGS) $(RACE_FLAGS) -tags='!integration' ./...
 
 .PHONY: test-coverage
 test-coverage: ## Run tests with coverage
 	@echo "Running tests with coverage..."
-	@GOEXPERIMENT=synctest $(GOTEST) $(TEST_FLAGS) $(COVERAGE_FLAGS) ./...
+	@GOEXPERIMENT=synctest $(GOTEST) $(TEST_FLAGS) $(COVERAGE_FLAGS) -tags='!integration' ./...
 	@$(GOCMD) tool cover -func=coverage.out
 	@$(GOCMD) tool cover -html=coverage.out -o coverage.html
+
+.PHONY: test-integration
+test-integration: ## Run integration tests (includes Docker containers)
+	@echo "Running integration tests..."
+	@GOEXPERIMENT=synctest $(GOTEST) $(TEST_FLAGS) -tags=integration ./...
+
+.PHONY: test-all
+test-all: ## Run all tests (unit + integration)
+	@echo "Running all tests..."
+	@GOEXPERIMENT=synctest $(GOTEST) $(TEST_FLAGS) ./...
 
 
 .PHONY: lint
