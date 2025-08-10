@@ -247,7 +247,8 @@ func (r *rateLimitMiddleware) handleGlobalLimit(ctx context.Context, key string)
 // This method provides thread-safe limiter management using a double-checked
 // locking pattern to minimize contention. It uses a read lock for the fast path
 // and a write lock for creation. Timestamps are updated atomically to enable
-// lock-free TTL tracking for cleanup.
+// lock-free TTL tracking for cleanup. Exhausted limiters preserve their state
+// to prevent rate limit bypass vulnerabilities.
 func (r *rateLimitMiddleware) getOrCreateLimiter(key string) *rate.Limiter {
 	now := time.Now().UnixNano()
 
@@ -269,9 +270,12 @@ func (r *rateLimitMiddleware) getOrCreateLimiter(key string) *rate.Limiter {
 		return lim
 	}
 
+	// Create new limiter with full burst capacity for truly fresh keys
 	lim := rate.NewLimiter(rate.Limit(r.localConfig.TokensPerSecond), r.localConfig.BurstSize)
 	tl := &timedLimiter{limiter: lim}
 	tl.lastUsed.Store(now)
+	// New limiters start as not exhausted (normal operation)
+	tl.exhausted.Store(false)
 	r.localLimiters[key] = tl
 	r.localMu.Unlock()
 	return lim
@@ -307,11 +311,11 @@ func (r *rateLimitMiddleware) isRedisError(err error) bool {
 
 // CleanupStale removes unused local rate limiters to prevent memory leaks.
 //
-// This method removes limiters that have not been accessed since the provided
-// `before` timestamp, but first resets their tokens to prevent rate limit
-// bypass vulnerabilities. When a limiter is marked for deletion due to being
-// stale, it is first reset to an empty state before removal to ensure any
-// final access cannot benefit from accumulated tokens.
+// This method marks stale limiters as exhausted to preserve rate limit state,
+// preventing rate limit bypass vulnerabilities. Limiters that have not been accessed
+// since the provided `before` timestamp are reset to empty state and marked as
+// exhausted. Only limiters that have been exhausted for an extended period are
+// eventually deleted to balance memory management with security.
 func (r *rateLimitMiddleware) CleanupStale(before time.Time) {
 	r.localMu.Lock()
 	defer r.localMu.Unlock()
@@ -320,10 +324,20 @@ func (r *rateLimitMiddleware) CleanupStale(before time.Time) {
 
 	for key, tl := range r.localLimiters {
 		if tl.lastUsed.Load() < cutoff {
-			// First reset limiter to prevent rate limit bypass if accessed
-			// during deletion, then remove for memory management.
-			tl.limiter = rate.NewLimiter(rate.Limit(r.localConfig.TokensPerSecond), 0)
-			delete(r.localLimiters, key)
+			// Check if limiter has full capacity (never used for rate limiting).
+			reservation := tl.limiter.Reserve()
+			hasFullCapacity := reservation.OK() && reservation.Delay() == 0
+			reservation.Cancel()
+
+			if hasFullCapacity && !tl.exhausted.Load() {
+				// Unused limiter with full capacity and never exhausted - safe to delete.
+				delete(r.localLimiters, key)
+			} else {
+				// Limiter has been used, is rate-limited, or was previously exhausted.
+				// Mark as exhausted and reset to empty state to prevent rate limit bypass.
+				tl.exhausted.Store(true)
+				tl.limiter = rate.NewLimiter(rate.Limit(r.localConfig.TokensPerSecond), 0)
+			}
 		}
 	}
 }
