@@ -46,14 +46,14 @@ build: ## Build all binaries (worker and cli)
 	@echo "Binaries built successfully"
 
 .PHONY: test
-test: ## Run unit tests (excludes integration tests)
+test: ## Run unit tests (excludes integration, fuzz, and benchmark tests)
 	@echo "Running unit tests..."
-	@GOEXPERIMENT=synctest $(GOTEST) $(TEST_FLAGS) -tags='!integration' ./...
+	@$(GOTEST) $(TEST_FLAGS) -short -tags '!integration' -run '^Test[^F]' ./...
 
 .PHONY: test-race
-test-race: ## Run unit tests with race detection (excludes integration tests)
+test-race: ## Run unit tests with race detection (excludes integration and fuzz tests)
 	@echo "Running unit tests with race detection..."
-	@GOEXPERIMENT=synctest $(GOTEST) $(TEST_FLAGS) $(RACE_FLAGS) -tags='!integration' ./...
+	@GOEXPERIMENT=synctest $(GOTEST) $(TEST_FLAGS) $(RACE_FLAGS) -tags='!integration' -run '^Test[^F]' ./...
 
 .PHONY: test-coverage
 test-coverage: ## Run tests with coverage

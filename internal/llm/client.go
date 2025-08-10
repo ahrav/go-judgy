@@ -20,7 +20,7 @@ import (
 	"github.com/ahrav/go-judgy/internal/domain"
 	"github.com/ahrav/go-judgy/internal/llm/business"
 	"github.com/ahrav/go-judgy/internal/llm/cache"
-	"github.com/ahrav/go-judgy/internal/llm/circuit_breaker"
+	"github.com/ahrav/go-judgy/internal/llm/circuitbreaker"
 	"github.com/ahrav/go-judgy/internal/llm/configuration"
 	"github.com/ahrav/go-judgy/internal/llm/providers"
 	"github.com/ahrav/go-judgy/internal/llm/ratelimit"
@@ -40,6 +40,7 @@ func newArtifactStoreAdapter(store business.ArtifactStore) transport.ArtifactSto
 	return &artifactStoreAdapter{store: store}
 }
 
+// Get retrieves content from the artifact store by reference.
 func (a *artifactStoreAdapter) Get(ctx context.Context, ref domain.ArtifactRef) (string, error) {
 	return a.store.Get(ctx, ref)
 }
@@ -63,10 +64,12 @@ func newConfigArtifactStoreAdapter(store configuration.ArtifactStore) business.A
 	return &configArtifactStoreAdapter{store: store}
 }
 
+// Get retrieves content from the config artifact store by reference.
 func (a *configArtifactStoreAdapter) Get(ctx context.Context, ref domain.ArtifactRef) (string, error) {
 	return a.store.Get(ctx, ref)
 }
 
+// Put stores content in the config artifact store.
 func (a *configArtifactStoreAdapter) Put(ctx context.Context, content string, kind domain.ArtifactKind, key string) (domain.ArtifactRef, error) {
 	ref, err := a.store.Put(ctx, content)
 	if err != nil {
@@ -132,6 +135,7 @@ func newRouterAdapter(router providers.Router) transport.Router {
 	return &routerAdapter{router: router}
 }
 
+// Pick selects the appropriate provider adapter for the given provider and model.
 func (r *routerAdapter) Pick(provider, model string) (transport.ProviderAdapter, error) {
 	providerAdapter, err := r.router.Pick(provider, model)
 	if err != nil {
@@ -148,14 +152,17 @@ type providerAdapterWrapper struct {
 	adapter providers.ProviderAdapter
 }
 
+// Build constructs an HTTP request from a transport request.
 func (w *providerAdapterWrapper) Build(ctx context.Context, req *transport.Request) (*http.Request, error) {
 	return w.adapter.Build(ctx, req)
 }
 
+// Parse converts an HTTP response to a transport response.
 func (w *providerAdapterWrapper) Parse(httpResp *http.Response) (*transport.Response, error) {
 	return w.adapter.Parse(httpResp)
 }
 
+// Name returns the name of the wrapped provider adapter.
 func (w *providerAdapterWrapper) Name() string {
 	return w.adapter.Name()
 }
@@ -270,7 +277,7 @@ func NewClient(cfg *configuration.Config) (Client, error) {
 		callMiddlewares = append(callMiddlewares, cacheMiddleware)
 	}
 
-	resilienceConfig := circuit_breaker.CircuitBreakerConfig{
+	resilienceConfig := circuitbreaker.Config{
 		FailureThreshold:   cfg.CircuitBreaker.FailureThreshold,
 		SuccessThreshold:   cfg.CircuitBreaker.SuccessThreshold,
 		OpenTimeout:        cfg.CircuitBreaker.OpenTimeout,
@@ -279,7 +286,7 @@ func NewClient(cfg *configuration.Config) (Client, error) {
 		MaxBreakers:        cfg.CircuitBreaker.MaxBreakers,
 		AdaptiveThresholds: cfg.CircuitBreaker.AdaptiveThresholds,
 	}
-	cbMiddleware, err := circuit_breaker.NewCircuitBreakerMiddlewareWithRedis(resilienceConfig, nil)
+	cbMiddleware, err := circuitbreaker.NewCircuitBreakerMiddlewareWithRedis(resilienceConfig, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize circuit breaker: %w", err)
 	}

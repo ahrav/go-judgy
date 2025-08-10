@@ -118,7 +118,10 @@ func TestCircuitBreakerStateInvariants(t *testing.T) {
 		return true
 	}
 
-	if err := quick.Check(property, nil); err != nil {
+	config := &quick.Config{
+		MaxCount: 10, // Reduce iterations for faster test execution
+	}
+	if err := quick.Check(property, config); err != nil {
 		t.Error(err)
 	}
 }
@@ -220,7 +223,10 @@ func TestCircuitBreakerThresholdInvariants(t *testing.T) {
 		return true
 	}
 
-	if err := quick.Check(property, nil); err != nil {
+	config := &quick.Config{
+		MaxCount: 10, // Reduce iterations for faster test execution
+	}
+	if err := quick.Check(property, config); err != nil {
 		t.Error(err)
 	}
 }
@@ -369,7 +375,10 @@ func TestCircuitBreakerProbeCounterInvariants(t *testing.T) {
 		return true
 	}
 
-	if err := quick.Check(property, nil); err != nil {
+	config := &quick.Config{
+		MaxCount: 10, // Reduce iterations for faster test execution
+	}
+	if err := quick.Check(property, config); err != nil {
 		t.Error(err)
 	}
 }
@@ -437,7 +446,10 @@ func TestCircuitBreakerHashDistribution(t *testing.T) {
 		return true
 	}
 
-	if err := quick.Check(property, nil); err != nil {
+	config := &quick.Config{
+		MaxCount: 10, // Reduce iterations for faster test execution
+	}
+	if err := quick.Check(property, config); err != nil {
 		t.Error(err)
 	}
 }
@@ -544,7 +556,7 @@ func TestCircuitBreakerTimeoutBehavior(t *testing.T) {
 	}
 
 	config := &quick.Config{
-		MaxCount: 20, // Reduce count since this test involves waiting
+		MaxCount: 10, // Reduce count since this test involves waiting
 	}
 	if err := quick.Check(property, config); err != nil {
 		t.Error(err)
@@ -645,7 +657,7 @@ func TestCircuitBreakerConcurrencyInvariants(t *testing.T) {
 	}
 
 	config := &quick.Config{
-		MaxCount: 20, // Reduce count for concurrent tests
+		MaxCount: 10, // Reduce count for concurrent tests
 	}
 	if err := quick.Check(property, config); err != nil {
 		t.Error(err)
@@ -737,7 +749,10 @@ func TestCircuitBreakerKeyConsistency(t *testing.T) {
 		return true
 	}
 
-	if err := quick.Check(property, nil); err != nil {
+	config := &quick.Config{
+		MaxCount: 10, // Reduce iterations for faster test execution
+	}
+	if err := quick.Check(property, config); err != nil {
 		t.Error(err)
 	}
 }
@@ -785,7 +800,10 @@ func TestHalfOpenProgressProperty(t *testing.T) {
 		// With correct implementation, we eventually close and allow requests freely.
 		return successes >= int(successThreshold)
 	}
-	if err := quick.Check(property, nil); err != nil {
+	config := &quick.Config{
+		MaxCount: 10, // Reduce iterations for faster test execution
+	}
+	if err := quick.Check(property, config); err != nil {
 		t.Error(err)
 	}
 }

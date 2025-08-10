@@ -1856,18 +1856,19 @@ func TestCircuitBreaker_MaxBreakersLimitConcurrent(t *testing.T) {
 				t.Errorf("unexpected error: %v", err)
 			}
 		}
+	}
 
-		if successCount != 5 {
-			t.Errorf("expected exactly 5 successful breaker creations, got %d", successCount)
-		}
+	// Validate results after collecting all errors
+	if successCount != 5 {
+		t.Errorf("expected exactly 5 successful breaker creations, got %d", successCount)
+	}
 
-		if limitErrorCount != 5 {
-			t.Errorf("expected exactly 5 CIRCUIT_BREAKER_LIMIT errors, got %d", limitErrorCount)
-		}
+	if limitErrorCount != 5 {
+		t.Errorf("expected exactly 5 CIRCUIT_BREAKER_LIMIT errors, got %d", limitErrorCount)
+	}
 
-		if otherErrorCount != 0 {
-			t.Errorf("expected no other errors, got %d", otherErrorCount)
-		}
+	if otherErrorCount != 0 {
+		t.Errorf("expected no other errors, got %d", otherErrorCount)
 	}
 }
 
