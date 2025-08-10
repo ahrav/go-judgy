@@ -402,6 +402,8 @@ func TestAtomicCorruptionHandling(t *testing.T) {
 		{
 			name: "valid_entry_hit",
 			setupData: func() {
+				// Use mock client's time to prevent negative age calculation
+				storedTime := mockClient.time.UnixMilli()
 				entry := &transport.IdempotentCacheEntry{
 					Provider:            "openai",
 					Model:               "gpt-4",
@@ -409,7 +411,7 @@ func TestAtomicCorruptionHandling(t *testing.T) {
 					ResponseHeaders:     map[string]string{},
 					Usage:               transport.NormalizedUsage{},
 					EstimatedMilliCents: 100,
-					StoredAtUnixMs:      time.Now().UnixMilli(),
+					StoredAtUnixMs:      storedTime,
 				}
 				entryData, _ := json.Marshal(entry)
 				mockClient.data[cacheKey] = entryData
