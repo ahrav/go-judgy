@@ -348,3 +348,4 @@ func (cb *circuitBreaker) transitionTo(newState CircuitState) {
 			"to", newState.String())
 	}
 }
+

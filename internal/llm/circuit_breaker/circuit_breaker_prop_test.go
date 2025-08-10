@@ -222,9 +222,10 @@ func TestCircuitBreakerThresholdInvariants(t *testing.T) {
 }
 
 // TestCircuitBreakerProbeCounterInvariants validates that the half-open probe
-// counters maintain correct bounds.
-// It also ensures that the system prevents excessive concurrent probes,
-// respecting probe limits under all concurrency scenarios.
+// counters maintain correct bounds for concurrent probes.
+// The circuit breaker allows up to maxHalfOpenProbes concurrent requests
+// in half-open state. As probes complete, new ones can start, so the total
+// number of probes over time may exceed maxHalfOpenProbes.
 func TestCircuitBreakerProbeCounterInvariants(t *testing.T) {
 	property := func(maxProbes uint8) bool {
 		if maxProbes == 0 {
@@ -233,15 +234,11 @@ func TestCircuitBreakerProbeCounterInvariants(t *testing.T) {
 
 		ctx := context.Background()
 
-		// Set success threshold higher than max probes to keep in half-open state
-		successThreshold := int(maxProbes) + 10
-		if successThreshold > 1000 {
-			successThreshold = 1000
-		}
-
+		// Set success threshold very high to prevent transition to closed
+		// This ensures we stay in half-open state throughout the test
 		config := circuit_breaker.CircuitBreakerConfig{
 			FailureThreshold: 1,
-			SuccessThreshold: successThreshold, // Keep in half-open
+			SuccessThreshold: 10000, // Very high to prevent closing
 			HalfOpenProbes:   int(maxProbes),
 			OpenTimeout:      1 * time.Millisecond,
 		}
@@ -249,14 +246,16 @@ func TestCircuitBreakerProbeCounterInvariants(t *testing.T) {
 		// Track probe attempts
 		var successfulProbes atomic.Int32
 		var rejectedProbes atomic.Int32
-		var handlerCalls atomic.Int32
+		var concurrentProbes atomic.Int32
+		var maxConcurrent atomic.Int32
+		var totalErrors atomic.Int32
 
-		// Combined handler that fails first then succeeds
-		var shouldFail atomic.Bool
-		shouldFail.Store(true)
-
+		// Handler that tracks concurrent calls
+		callCount := atomic.Int32{}
 		handler := transport.HandlerFunc(func(_ context.Context, _ *transport.Request) (*transport.Response, error) {
-			if shouldFail.Load() {
+			count := callCount.Add(1)
+			// First call fails to open the circuit
+			if count == 1 {
 				return nil, &llmerrors.ProviderError{
 					Provider:   "test",
 					StatusCode: 500,
@@ -264,9 +263,26 @@ func TestCircuitBreakerProbeCounterInvariants(t *testing.T) {
 					Type:       llmerrors.ErrorTypeProvider,
 				}
 			}
-			handlerCalls.Add(1)
-			// Simulate some work
-			time.Sleep(time.Microsecond * 100)
+
+			// Track concurrent probe count
+			current := concurrentProbes.Add(1)
+			for {
+				max := maxConcurrent.Load()
+				if current > max {
+					if maxConcurrent.CompareAndSwap(max, current) {
+						break
+					}
+				} else {
+					break
+				}
+			}
+
+			// Simulate some work to test concurrency
+			time.Sleep(time.Millisecond * 5)
+
+			// Decrement concurrent count on exit
+			defer concurrentProbes.Add(-1)
+
 			return &transport.Response{
 				Content: "success",
 			}, nil
@@ -282,14 +298,15 @@ func TestCircuitBreakerProbeCounterInvariants(t *testing.T) {
 			Question:  "test",
 		}
 
-		// Open circuit
-		_, _ = cbHandler.Handle(ctx, req)
+		// Open circuit with first failure
+		_, err := cbHandler.Handle(ctx, req)
+		if err == nil {
+			// Should have failed
+			return false
+		}
 
-		// Wait for half-open
+		// Wait for circuit to transition to half-open
 		time.Sleep(2 * time.Millisecond)
-
-		// Now allow success
-		shouldFail.Store(false)
 
 		// Launch many concurrent probes
 		numGoroutines := int(maxProbes) * 10
@@ -306,32 +323,42 @@ func TestCircuitBreakerProbeCounterInvariants(t *testing.T) {
 				_, err := cbHandler.Handle(ctx, req)
 				if err == nil {
 					successfulProbes.Add(1)
-				} else if perr, ok := err.(*llmerrors.ProviderError); ok && perr.Code == "CIRCUIT_HALF_OPEN_LIMIT" {
-					rejectedProbes.Add(1)
+				} else {
+					totalErrors.Add(1)
+					if perr, ok := err.(*llmerrors.ProviderError); ok && perr.Code == "CIRCUIT_HALF_OPEN_LIMIT" {
+						rejectedProbes.Add(1)
+					}
 				}
 			}()
 		}
 
 		wg.Wait()
 
-		// Invariant: Handler calls should not significantly exceed maxProbes
-		// Allow some tolerance for race conditions during state transitions
-		actualCalls := handlerCalls.Load()
-		tolerance := int32(maxProbes) / 10
-		if tolerance < 2 {
-			tolerance = 2
-		}
+		// Invariant: Maximum concurrent probes should not significantly exceed maxProbes
+		// The circuit breaker limits concurrent probes, not total probes
+		// Allow a small tolerance for measurement timing differences
+		maxConcurrentObserved := maxConcurrent.Load()
+		tolerance := int32(1) // Allow off-by-one due to timing
 
-		if actualCalls > int32(maxProbes)+tolerance {
-			// Too many probes got through
+		if maxConcurrentObserved > int32(maxProbes)+tolerance {
+			// Too many concurrent probes
+			t.Logf("Too many concurrent probes: %d > %d (maxProbes+tolerance)", maxConcurrentObserved, int32(maxProbes)+tolerance)
 			return false
 		}
 
-		// Invariant: Most requests should be either successful or rejected
-		total := successfulProbes.Load() + rejectedProbes.Load()
-		if total < int32(numGoroutines/2) {
-			// Too many requests unaccounted for
+		// Invariant: All requests should be accounted for
+		total := successfulProbes.Load() + totalErrors.Load()
+		if total != int32(numGoroutines) {
+			// Some requests unaccounted for
+			t.Logf("Requests unaccounted: total=%d, expected=%d", total, numGoroutines)
 			return false
+		}
+
+		// Invariant: Should have both successes and rejections with high contention
+		// With many goroutines competing for limited probe slots, we expect some rejections
+		if numGoroutines > int(maxProbes)*2 && rejectedProbes.Load() == 0 {
+			t.Logf("Expected some rejections with %d goroutines and %d maxProbes", numGoroutines, maxProbes)
+			// This is not a hard failure as timing can affect this
 		}
 
 		return true
