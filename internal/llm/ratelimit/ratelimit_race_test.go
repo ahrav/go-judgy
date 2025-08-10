@@ -160,7 +160,7 @@ func TestRateLimitMiddleware_ConcurrentCheckLocalLimit(t *testing.T) {
 			for j := 0; j < requestsPerGoroutine; j++ {
 				key := fmt.Sprintf("shared-key-%d", j%sharedKeys)
 
-				err := rlm.checkLocalLimit(key)
+				err := checkLocalLimit(rlm, key)
 				if err == nil {
 					atomic.AddInt64(&successCount, 1)
 				} else {
@@ -363,7 +363,7 @@ func TestRateLimitMiddleware_ConcurrentCleanupOperations(t *testing.T) {
 					rlm.getOrCreateLimiter(key)
 				case 1:
 					// Check rate limit
-					rlm.checkLocalLimit(key)
+					checkLocalLimit(rlm, key)
 				case 2:
 					// Read stats (involves locking)
 					rlm.GetStats()
@@ -424,7 +424,7 @@ func TestRateLimitMiddleware_ConcurrentStartStop(t *testing.T) {
 				// Do some work while started
 				for j := 0; j < 10; j++ {
 					key := fmt.Sprintf("concurrent-key-%d-%d", opID, j)
-					rlm.checkLocalLimit(key)
+					checkLocalLimit(rlm, key)
 				}
 
 				rlm.Stop()
@@ -438,7 +438,7 @@ func TestRateLimitMiddleware_ConcurrentStartStop(t *testing.T) {
 				// More work
 				for j := 0; j < 5; j++ {
 					key := fmt.Sprintf("restart-key-%d-%d", opID, j)
-					rlm.checkLocalLimit(key)
+					checkLocalLimit(rlm, key)
 				}
 
 				// Final stop
@@ -593,7 +593,7 @@ func TestRateLimitMiddleware_ConcurrentMemoryPressure(t *testing.T) {
 				switch j % 5 {
 				case 0, 1, 2:
 					// Most common: check rate limit
-					rlm.checkLocalLimit(key)
+					checkLocalLimit(rlm, key)
 				case 3:
 					// Get limiter directly
 					limiter := rlm.getOrCreateLimiter(key)
@@ -617,6 +617,6 @@ func TestRateLimitMiddleware_ConcurrentMemoryPressure(t *testing.T) {
 	t.Logf("  Operations completed: %d", numGoroutines*operationsPerGoroutine)
 
 	// System should still be responsive
-	testErr := rlm.checkLocalLimit("post-pressure-test")
+	testErr := checkLocalLimit(rlm, "post-pressure-test")
 	assert.NoError(t, testErr, "System should be responsive after pressure test")
 }

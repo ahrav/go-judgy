@@ -96,8 +96,8 @@ func TestProperty_RateLimitingDeterminism(t *testing.T) {
 		results2 := make([]bool, requestCount)
 
 		for i := 0; i < requestCount; i++ {
-			err1 := rlm1.checkLocalLimit(key)
-			err2 := rlm2.checkLocalLimit(key)
+			err1 := checkLocalLimit(rlm1, key)
+			err2 := checkLocalLimit(rlm2, key)
 
 			results1[i] = (err1 == nil)
 			results2[i] = (err2 == nil)
@@ -160,7 +160,7 @@ func TestProperty_BurstCapacityRespected(t *testing.T) {
 		// Make requests up to burst limit + extra
 		requestCount := burstSize + 10
 		for i := 0; i < requestCount; i++ {
-			err := rlm.checkLocalLimit(key)
+			err := checkLocalLimit(rlm, key)
 			if err == nil {
 				successCount++
 			}
@@ -363,7 +363,7 @@ func TestProperty_RateLimitErrorValidation(t *testing.T) {
 		// Make enough requests to trigger rate limiting
 		var rateLimitErr *llmerrors.RateLimitError
 		for i := 0; i < burstSize+50; i++ {
-			err := rlm.checkLocalLimit(key)
+			err := checkLocalLimit(rlm, key)
 			if err != nil && errors.As(err, &rateLimitErr) {
 				break
 			}

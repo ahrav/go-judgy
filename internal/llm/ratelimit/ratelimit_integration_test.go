@@ -271,7 +271,7 @@ func TestRateLimitMiddleware_RedisScript_Consistency(t *testing.T) {
 	}, 10)
 
 	for i := 0; i < 10; i++ {
-		err := rlm.checkGlobalLimit(context.Background(), key)
+		err := checkGlobalLimit(rlm, context.Background(), key)
 		if err == nil {
 			results[i].allowed = true
 		} else {
@@ -297,7 +297,7 @@ func TestRateLimitMiddleware_RedisScript_Consistency(t *testing.T) {
 	time.Sleep(1100 * time.Millisecond) // Wait for Redis window to reset
 
 	// Should be able to make requests again
-	err := rlm.checkGlobalLimit(context.Background(), key)
+	err := checkGlobalLimit(rlm, context.Background(), key)
 	assert.NoError(t, err, "Should succeed after window reset")
 }
 
@@ -326,7 +326,7 @@ func TestRateLimitMiddleware_RedisCleanup_KeyExpiration(t *testing.T) {
 	defer client.Del(context.Background(), globalKey)
 
 	// Make a request to create the Redis key
-	err := rlm.checkGlobalLimit(context.Background(), key)
+	err := checkGlobalLimit(rlm, context.Background(), key)
 	assert.NoError(t, err)
 
 	// Verify key exists and has TTL
@@ -345,7 +345,7 @@ func TestRateLimitMiddleware_RedisCleanup_KeyExpiration(t *testing.T) {
 	assert.Equal(t, int64(0), exists, "Redis key should have expired")
 
 	// Should be able to make new requests (fresh window)
-	err = rlm.checkGlobalLimit(context.Background(), key)
+	err = checkGlobalLimit(rlm, context.Background(), key)
 	assert.NoError(t, err, "Should succeed with fresh window")
 }
 
@@ -482,7 +482,7 @@ func TestRateLimitMiddleware_ZeroRPSSemantics_Integration(t *testing.T) {
 	}
 
 	key := rlm.buildKey(req)
-	err := rlm.checkGlobalLimit(context.Background(), key)
+	err := checkGlobalLimit(rlm, context.Background(), key)
 	assert.NoError(t, err, "Zero RPS should disable global rate limiting")
 
 	// Clean up any Redis keys to prevent test interference

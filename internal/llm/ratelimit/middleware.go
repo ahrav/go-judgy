@@ -1,4 +1,4 @@
-// Package ratelimit Package resilience provides dual-layer rate limiting for LLM request processing.
+// Package ratelimit provides dual-layer rate limiting for LLM request processing.
 //
 // This package implements a middleware that combines a local token-bucket algorithm
 // with an optional Redis-based distributed rate limiter.
@@ -17,7 +17,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"math"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -27,41 +26,11 @@ import (
 	"golang.org/x/time/rate"
 
 	"github.com/ahrav/go-judgy/internal/llm/configuration"
-	llmerrors "github.com/ahrav/go-judgy/internal/llm/errors"
 	"github.com/ahrav/go-judgy/internal/llm/transport"
 )
 
-// timedLimiter wraps a rate limiter with an atomic timestamp.
-// This design enables TTL-based cleanup of stale limiters without requiring locks,
-// preventing memory leaks in long-running services.
-type timedLimiter struct {
-	limiter *rate.Limiter
-	// lastUsed stores the last access time as a Unix nanosecond timestamp.
-	// It is updated atomically to ensure thread-safe, lock-free reads.
-	lastUsed atomic.Int64
-}
-
-// Rate limiting configuration constants.
+// Cleanup and lifecycle constants.
 const (
-	// RedisReadTimeoutSeconds defines the read timeout for Redis operations.
-	// A 5-second timeout balances responsiveness with network latency tolerance.
-	RedisReadTimeoutSeconds = 5
-
-	// RedisWriteTimeoutSeconds defines the write timeout for Redis operations.
-	// It matches the read timeout for consistent behavior.
-	RedisWriteTimeoutSeconds = 5
-
-	// RedisPoolSize sets the maximum number of connections in the Redis pool.
-	// This value is sized for moderate concurrent load across service instances.
-	RedisPoolSize = 10
-
-	// MillisecondsPerSecond defines the number of milliseconds in a second.
-	MillisecondsPerSecond = 1000
-
-	// DefaultRateLimit provides a fallback rate when a configuration is missing.
-	// It is set to a conservative 10 requests per second.
-	DefaultRateLimit = 10
-
 	// CleanupInterval determines the frequency of stale limiter cleanup.
 	// A 1-hour interval balances memory usage with cleanup overhead.
 	CleanupInterval = 1 * time.Hour
@@ -69,9 +38,6 @@ const (
 	// LimiterTTL defines the time-to-live for unused local limiters.
 	// It matches the CleanupInterval to ensure deterministic cleanup behavior.
 	LimiterTTL = 1 * time.Hour
-
-	// DefaultInitialInterval provides a fallback for retry calculations.
-	DefaultInitialInterval = 1 * time.Second
 )
 
 // rateLimitMiddleware implements dual-layer rate limiting for LLM requests.
@@ -110,59 +76,6 @@ type rateLimitMiddleware struct {
 
 	// logger provides structured logging for observability.
 	logger *slog.Logger
-}
-
-// validateRateLimitConfig performs comprehensive validation of rate limiting configuration.
-//
-// This function orchestrates validation of both local and global rate limiting
-// settings to prevent security vulnerabilities and ensure correct operation.
-func validateRateLimitConfig(cfg *configuration.RateLimitConfig) error {
-	if err := validateLocalRateLimitConfig(cfg.Local); err != nil {
-		return err
-	}
-
-	if err := validateGlobalRateLimitConfig(&cfg.Global); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-// validateLocalRateLimitConfig validates the local rate limit configuration.
-//
-// This function ensures that local rate limiting parameters are non-negative
-// and enforce the business rule that BurstSize must be 0 when TokensPerSecond is 0.
-func validateLocalRateLimitConfig(cfg configuration.LocalRateLimitConfig) error {
-	if !cfg.Enabled {
-		return nil // Skip validation when local limiting is disabled
-	}
-
-	if cfg.TokensPerSecond < 0 {
-		return fmt.Errorf("invalid local rate limit: TokensPerSecond cannot be negative (got %f)", cfg.TokensPerSecond)
-	}
-	if cfg.BurstSize < 0 {
-		return fmt.Errorf("invalid local rate limit: BurstSize cannot be negative (got %d)", cfg.BurstSize)
-	}
-	if cfg.TokensPerSecond == 0 && cfg.BurstSize > 0 {
-		return fmt.Errorf("invalid local rate limit: BurstSize must be 0 when TokensPerSecond is 0")
-	}
-
-	return nil
-}
-
-// validateGlobalRateLimitConfig validates the global rate limit configuration.
-//
-// This function ensures that global rate limiting parameters are non-negative.
-func validateGlobalRateLimitConfig(cfg *configuration.GlobalRateLimitConfig) error {
-	if !cfg.Enabled {
-		return nil // Skip validation when global limiting is disabled
-	}
-
-	if cfg.RequestsPerSecond < 0 {
-		return fmt.Errorf("invalid global rate limit: RequestsPerSecond cannot be negative (got %d)", cfg.RequestsPerSecond)
-	}
-
-	return nil
 }
 
 // NewRateLimitMiddlewareWithRedis creates a transport.Middleware for rate limiting.
@@ -264,14 +177,14 @@ func (r *rateLimitMiddleware) middleware() transport.Middleware {
 
 			// Phase 1: Local token bucket limiting (fast path).
 			if r.localConfig.Enabled {
-				if err := r.checkLocalLimit(key); err != nil {
+				if err := checkLocalLimit(r, key); err != nil {
 					return nil, err // Return immediately on local rate limit
 				}
 			}
 
 			// Phase 2: Global Redis-based limiting with graceful degradation.
 			if r.globalConfig.Enabled && !r.globalConfig.DegradedMode.Load() {
-				if err := r.checkGlobalLimit(ctx, key); err != nil {
+				if err := checkGlobalLimit(r, ctx, key); err != nil {
 					// Handle Redis connectivity issues by switching to degraded mode.
 					if r.isRedisError(err) {
 						r.logger.Warn("Redis error, switching to degraded mode", "error", err)
@@ -279,7 +192,7 @@ func (r *rateLimitMiddleware) middleware() transport.Middleware {
 						// If local limiting is disabled, enforce fallback rate limiting
 						// to prevent fail-open vulnerability when Redis is unavailable.
 						if !r.localConfig.Enabled {
-							if err := r.checkFallbackLimit(key); err != nil {
+							if err := checkFallbackLimit(r, key); err != nil {
 								return nil, err
 							}
 						}
@@ -292,7 +205,7 @@ func (r *rateLimitMiddleware) middleware() transport.Middleware {
 			// Phase 3: Fallback limiting when in degraded mode with local disabled.
 			// This ensures we never fail open when both Redis and local limiting are unavailable.
 			if r.globalConfig.Enabled && r.globalConfig.DegradedMode.Load() && !r.localConfig.Enabled {
-				if err := r.checkFallbackLimit(key); err != nil {
+				if err := checkFallbackLimit(r, key); err != nil {
 					return nil, err
 				}
 			}
@@ -311,37 +224,6 @@ func (r *rateLimitMiddleware) buildKey(req *transport.Request) string {
 	return fmt.Sprintf("%s:%s:%s:%s", req.TenantID, req.Provider, req.Model, req.Operation)
 }
 
-// checkLocalLimit enforces the local token-bucket rate limit.
-//
-// This method is the fast-path check, using per-key token buckets to allow
-// controlled bursts while maintaining an average rate. If the limit is exceeded,
-// it calculates an optimal retry delay without consuming a token, preventing
-// bucket capacity leaks.
-func (r *rateLimitMiddleware) checkLocalLimit(key string) error {
-	limiter := r.getOrCreateLimiter(key)
-
-	if !limiter.Allow() {
-		// Calculate retry delay without consuming tokens to avoid capacity leaks.
-		reservation := limiter.Reserve()
-		delay := reservation.Delay()
-		reservation.Cancel() // Critical: prevent token consumption for failed requests
-
-		// Apply minimum 1-second retry to prevent tight client retry loops.
-		retryAfter := int(math.Ceil(delay.Seconds()))
-		if retryAfter < 1 {
-			retryAfter = 1
-		}
-
-		return &llmerrors.RateLimitError{
-			Provider:   "local",
-			Limit:      int(r.localConfig.TokensPerSecond),
-			RetryAfter: retryAfter,
-		}
-	}
-
-	return nil // Token bucket has capacity, allow request
-}
-
 // getOrCreateLimiter retrieves an existing token-bucket limiter or creates a new one.
 //
 // This method provides thread-safe limiter management using a double-checked
@@ -353,7 +235,7 @@ func (r *rateLimitMiddleware) getOrCreateLimiter(key string) *rate.Limiter {
 
 	r.localMu.RLock()
 	if tl, ok := r.localLimiters[key]; ok {
-		// Touch while holding RLock so CleanupStale (writer) can’t delete before we update.
+		// Touch while holding RLock so CleanupStale (writer) can't delete before we update.
 		tl.lastUsed.Store(now)
 		lim := tl.limiter
 		r.localMu.RUnlock()
@@ -375,208 +257,6 @@ func (r *rateLimitMiddleware) getOrCreateLimiter(key string) *rate.Limiter {
 	r.localLimiters[key] = tl
 	r.localMu.Unlock()
 	return lim
-}
-
-// checkGlobalLimit enforces the distributed rate limit using a Redis fixed window.
-//
-// This method uses a 1-second fixed-window counting algorithm implemented in a
-// Lua script for atomicity and performance. The script handles counter
-// initialization, incrementing, and TTL management in a single Redis command,
-// reducing network round-trips and preventing race conditions. If the limit is
-// exceeded, it returns an error with retry timing based on the window's TTL.
-func (r *rateLimitMiddleware) checkGlobalLimit(ctx context.Context, key string) error {
-	if r.globalClient == nil {
-		return nil // No global client configured, skip global limiting
-	}
-
-	// Atomic Lua script for distributed rate limiting with fixed 1-second windows.
-	// Handles all race conditions and TTL edge cases in a single Redis operation.
-	script := redis.NewScript(`
-		local key = KEYS[1]
-		local window = tonumber(ARGV[1])    -- Window duration in milliseconds
-		local limit = tonumber(ARGV[2])     -- Request limit per window
-
-		-- Get current request count for this window
-		local current = redis.call('GET', key)
-		if current == false then
-			-- First request in new window, initialize counter with TTL
-			redis.call('SET', key, 1, 'PX', window)
-			return {1, limit - 1}  -- Allow request, return remaining capacity
-		end
-
-		local count = tonumber(current)
-		if count < limit then
-			-- Within limit, increment counter and preserve TTL
-			local newCount = redis.call('INCR', key)
-			local ttl = redis.call('PTTL', key)
-			if ttl == -1 then
-				-- Key exists without TTL (edge case), restore window expiration
-				redis.call('PEXPIRE', key, window)
-			end
-			return {1, limit - newCount}  -- Allow request, return remaining capacity
-		else
-			-- Rate limit exceeded, return retry timing
-			local ttl = redis.call('PTTL', key)
-			return {0, ttl}  -- Deny request, return milliseconds until window reset
-		end
-	`)
-
-	globalKey := fmt.Sprintf("rl:global:%s", key)    // Prefix for Redis key namespacing
-	windowMs := int64(MillisecondsPerSecond)         // 1-second window in milliseconds
-	limit := int64(r.globalConfig.RequestsPerSecond) // Configured global rate limit
-
-	// Defense-in-depth: Reject negative rate limits at runtime
-	// This should never happen if configuration validation is working correctly,
-	// but we check here to prevent security vulnerabilities
-	if limit < 0 {
-		r.logger.Error("negative global rate limit detected at runtime", "limit", limit)
-		return fmt.Errorf("invalid global rate limit: RequestsPerSecond cannot be negative (got %d)", limit)
-	}
-
-	// Skip global limiting when disabled (RequestsPerSecond == 0).
-	if limit == 0 {
-		return nil // Global rate limiting disabled, continue with local-only
-	}
-
-	// Execute atomic Lua script for distributed rate limiting.
-	result, err := script.Run(ctx, r.globalClient, []string{globalKey},
-		windowMs, limit).Result()
-	if err != nil {
-		return fmt.Errorf("global rate limit check failed: %w", err)
-	}
-
-	// Parse Redis response: [allowed, remaining_or_ttl].
-	res, ok := result.([]any)
-	if !ok || len(res) < 2 {
-		r.logger.Warn("invalid Redis response format, switching to degraded mode", "response", result)
-		r.globalConfig.DegradedMode.Store(true)
-		return nil // Graceful degradation to local-only limiting
-	}
-
-	allowed, ok := res[0].(int64)
-	if !ok {
-		r.logger.Warn("invalid Redis allowed value format, switching to degraded mode", "allowed", res[0])
-		r.globalConfig.DegradedMode.Store(true)
-		return nil // Graceful degradation on parsing errors
-	}
-
-	if allowed == 0 {
-		// Rate limit exceeded, extract retry timing from TTL.
-		retryAfterMs, ok := res[1].(int64)
-		if !ok || retryAfterMs <= 0 {
-			// Fallback to default interval on invalid TTL.
-			retryAfterMs = int64(DefaultInitialInterval / time.Millisecond)
-		}
-
-		retryAfterSecs := int(retryAfterMs / MillisecondsPerSecond)
-		if retryAfterSecs < 1 {
-			retryAfterSecs = 1 // Minimum 1-second retry to prevent tight loops
-		}
-		if retryAfterSecs > 3600 {
-			retryAfterSecs = 3600 // Maximum 1-hour retry for safety
-		}
-
-		return &llmerrors.RateLimitError{
-			Provider:   "global",
-			Limit:      int(limit),
-			RetryAfter: retryAfterSecs,
-		}
-	}
-
-	return nil // Request allowed, continue processing
-}
-
-// checkFallbackLimit enforces a default rate limit when both Redis and local limiting fail.
-//
-// This method provides a security fallback to prevent fail-open behavior when
-// Redis is unavailable and local limiting is disabled. It uses the DefaultRateLimit
-// constant to create a temporary local limiter that prevents unlimited throughput
-// while maintaining service availability during degraded operation.
-//
-// The fallback limiter uses the same token-bucket algorithm as normal local
-// limiting but with conservative defaults designed for emergency operation.
-func (r *rateLimitMiddleware) checkFallbackLimit(key string) error {
-	fallbackKey := fmt.Sprintf("fallback:%s", key)
-
-	r.localMu.RLock()
-	if tl, ok := r.localLimiters[fallbackKey]; ok {
-		tl.lastUsed.Store(time.Now().UnixNano())
-		lim := tl.limiter
-		r.localMu.RUnlock()
-
-		if !lim.Allow() {
-			reservation := lim.Reserve()
-			delay := reservation.Delay()
-			reservation.Cancel()
-
-			retryAfter := int(math.Ceil(delay.Seconds()))
-			if retryAfter < 1 {
-				retryAfter = 1
-			}
-
-			return &llmerrors.RateLimitError{
-				Provider:   "fallback",
-				Limit:      DefaultRateLimit,
-				RetryAfter: retryAfter,
-			}
-		}
-		return nil
-	}
-	r.localMu.RUnlock()
-
-	// Create fallback limiter with DefaultRateLimit and minimal burst.
-	r.localMu.Lock()
-	if tl, ok := r.localLimiters[fallbackKey]; ok {
-		tl.lastUsed.Store(time.Now().UnixNano())
-		lim := tl.limiter
-		r.localMu.Unlock()
-
-		if !lim.Allow() {
-			reservation := lim.Reserve()
-			delay := reservation.Delay()
-			reservation.Cancel()
-
-			retryAfter := int(math.Ceil(delay.Seconds()))
-			if retryAfter < 1 {
-				retryAfter = 1
-			}
-
-			return &llmerrors.RateLimitError{
-				Provider:   "fallback",
-				Limit:      DefaultRateLimit,
-				RetryAfter: retryAfter,
-			}
-		}
-		r.localMu.Unlock()
-		return nil
-	}
-
-	// Create new fallback limiter with conservative settings.
-	fallbackLimiter := rate.NewLimiter(rate.Limit(DefaultRateLimit), DefaultRateLimit)
-	tl := &timedLimiter{limiter: fallbackLimiter}
-	tl.lastUsed.Store(time.Now().UnixNano())
-	r.localLimiters[fallbackKey] = tl
-	r.localMu.Unlock()
-
-	// Check the newly created fallback limiter
-	if !fallbackLimiter.Allow() {
-		reservation := fallbackLimiter.Reserve()
-		delay := reservation.Delay()
-		reservation.Cancel()
-
-		retryAfter := int(math.Ceil(delay.Seconds()))
-		if retryAfter < 1 {
-			retryAfter = 1
-		}
-
-		return &llmerrors.RateLimitError{
-			Provider:   "fallback",
-			Limit:      DefaultRateLimit,
-			RetryAfter: retryAfter,
-		}
-	}
-
-	return nil
 }
 
 // isRedisError determines if an error indicates a Redis connectivity issue.
@@ -624,34 +304,6 @@ func (r *rateLimitMiddleware) CleanupStale(before time.Time) {
 			delete(r.localLimiters, key)
 		}
 	}
-}
-
-// Stats provides comprehensive metrics for rate limiting performance.
-//
-// These statistics enable production monitoring and capacity planning by exposing
-// the state of both the local limiter and the Redis connection pool. The metrics
-// can be used to alert on degraded mode, connection pool exhaustion, or high
-// memory usage from an accumulation of local limiters.
-type Stats struct {
-	// LocalLimiters is the number of active per-key token-bucket limiters.
-	LocalLimiters int
-	// GlobalEnabled indicates whether global Redis-based rate limiting is configured.
-	GlobalEnabled bool
-	// DegradedMode indicates whether the system has fallen back to local-only limiting.
-	DegradedMode bool
-
-	// PoolHits is the number of connections reused from the Redis pool.
-	PoolHits uint32
-	// PoolMisses is the number of new connections created by the Redis pool.
-	PoolMisses uint32
-	// PoolTimeouts is the number of connection acquisition timeouts.
-	PoolTimeouts uint32
-	// PoolTotalConns is the total number of connections managed by the Redis pool.
-	PoolTotalConns uint32
-	// PoolIdleConns is the number of idle connections available for reuse.
-	PoolIdleConns uint32
-	// PoolStaleConns is the number of connections marked as stale and pending cleanup.
-	PoolStaleConns uint32
 }
 
 // GetStats returns a snapshot of the rate limiting performance statistics.

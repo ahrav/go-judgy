@@ -164,11 +164,11 @@ func TestRateLimitMiddleware_TTLValidation(t *testing.T) {
 	key := rlm.buildKey(req)
 
 	// First request consumes the single available token
-	err := rlm.checkLocalLimit(key)
+	err := checkLocalLimit(rlm, key)
 	assert.NoError(t, err, "First request should succeed with available token")
 
 	// Second immediate request should exceed token bucket capacity
-	err = rlm.checkLocalLimit(key)
+	err = checkLocalLimit(rlm, key)
 	assert.Error(t, err, "Second request should be rate limited")
 
 	// Validate rate limit error structure and timing bounds
@@ -456,7 +456,7 @@ func TestRateLimitMiddleware_RuntimeNegativeRPSProtection(t *testing.T) {
 	rlm.globalClient = client
 
 	// Attempt to check global limit with negative RPS
-	err := rlm.checkGlobalLimit(context.Background(), "test-key")
+	err := checkGlobalLimit(rlm, context.Background(), "test-key")
 
 	// Runtime protection should reject negative values
 	assert.Error(t, err, "checkGlobalLimit should reject negative RPS at runtime")
@@ -483,7 +483,7 @@ func TestRateLimit_PreventDuplicateLimiterOnCleanup(t *testing.T) {
 	var successfulRequests []string
 
 	makeRequest := func(phase string) bool {
-		err := rlm.checkLocalLimit(key)
+		err := checkLocalLimit(rlm, key)
 		if err == nil {
 			successfulRequests = append(successfulRequests, phase)
 			return true
