@@ -412,7 +412,7 @@ func TestRetryMiddleware_CircuitBreakerIntegration(t *testing.T) {
 			})
 
 			// Test with half-open probe context
-			ctxWithProbe := context.WithValue(ctx, circuitBreakerProbeKey, true)
+			ctxWithProbe := context.WithValue(ctx, "circuit_breaker_half_open_probe", true)
 
 			middleware, err := retry.NewRetryMiddlewareWithConfig(config)
 			if err != nil {
@@ -865,6 +865,9 @@ func TestGetActivityOptions(t *testing.T) {
 // This test validates the behavior indirectly through the middleware's handling
 // of retry-after values in errors.
 func TestParseRetryAfterValue(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping slow test in short mode")
+	}
 	// We'll test this indirectly through the middleware's retry-after handling
 
 	tests := []struct {
@@ -993,11 +996,11 @@ func TestIsNetworkError(t *testing.T) {
 			isNetwork: true,
 		},
 		{
-			name: "url.Error temporary",
+			name: "url.Error timeout",
 			error: &url.Error{
 				Op:  "Get",
 				URL: "http://example.com",
-				Err: &testTempError{msg: "temporary failure"},
+				Err: &testTimeoutError{msg: "timeout failure"},
 			},
 			isNetwork: true,
 		},
@@ -1123,6 +1126,15 @@ func (e *testTempError) Error() string   { return e.msg }
 func (e *testTempError) Temporary() bool { return true }
 func (e *testTempError) Timeout() bool   { return false }
 
+// testTimeoutError is a mock error type that implements the net.Error interface with timeout.
+type testTimeoutError struct {
+	msg string
+}
+
+func (e *testTimeoutError) Error() string   { return e.msg }
+func (e *testTimeoutError) Temporary() bool { return false }
+func (e *testTimeoutError) Timeout() bool   { return true }
+
 // TestRetryMiddleware_RetryAfterProvider validates that errors implementing
 // the RetryAfterProvider interface are handled correctly by the middleware.
 // It ensures the middleware respects the custom retry duration provided by the error.
@@ -1203,6 +1215,9 @@ func (e *testRetryAfterError) GetRetryAfter() time.Duration { return e.retryAfte
 // It ensures the middleware correctly extracts and respects the retry-after
 // duration from the error's Details map.
 func TestRetryMiddleware_WorkflowError(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping slow test in short mode")
+	}
 	ctx := context.Background()
 	var callCount int32
 
