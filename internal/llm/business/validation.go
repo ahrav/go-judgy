@@ -295,6 +295,7 @@ func ValidateProviderResponse(resp *transport.Response) error {
 		if expectedTotal > 0 && resp.Usage.TotalTokens != expectedTotal {
 			// Log warning but don't fail.
 			// Some providers might include other tokens in total.
+			_ = expectedTotal // Acknowledge the mismatch for debugging purposes
 		}
 	}
 

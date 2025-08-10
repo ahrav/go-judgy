@@ -1,3 +1,6 @@
+// Package transport provides LLM request/response conversion utilities.
+// It handles transformation between domain types and provider-specific formats,
+// enabling clean separation between business logic and provider implementation details.
 package transport
 
 import (
@@ -5,8 +8,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/ahrav/go-judgy/internal/domain"
 	"github.com/google/uuid"
+
+	"github.com/ahrav/go-judgy/internal/domain"
 )
 
 // ExtractAnswerContent retrieves answer content from artifact storage for scoring.

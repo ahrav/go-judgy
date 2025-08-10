@@ -35,11 +35,12 @@ import (
 	"testing/quick"
 	"time"
 
+	"github.com/redis/go-redis/v9"
+	"github.com/stretchr/testify/require"
+
 	"github.com/ahrav/go-judgy/internal/llm/configuration"
 	llmerrors "github.com/ahrav/go-judgy/internal/llm/errors"
 	"github.com/ahrav/go-judgy/internal/llm/transport"
-	"github.com/redis/go-redis/v9"
-	"github.com/stretchr/testify/require"
 )
 
 // TestProperty_RateLimitingDeterminism validates deterministic rate limiting behavior.
@@ -512,11 +513,7 @@ func TestProperty_StatisticsConsistency(t *testing.T) {
 
 		// 3. DegradedMode should be readable
 		degradedMode := rlm.globalConfig.DegradedMode.Load()
-		if stats.DegradedMode != degradedMode {
-			return false
-		}
-
-		return true
+		return stats.DegradedMode == degradedMode
 	}
 
 	config := &quick.Config{
@@ -610,6 +607,7 @@ func TestProperty_ConfigurationBoundsRespected(t *testing.T) {
 		// Should be able to get stats without error
 		if middleware != nil {
 			// Can't test GetStats as it's not exposed through the public API
+			_ = middleware // Middleware exists and is functional
 		}
 		return err == nil
 	}
@@ -638,7 +636,7 @@ func TestProperty_MiddlewareCompositionPreservesTypes(t *testing.T) {
 
 	property := func(tenantID, provider, model, operation string) bool {
 		// Create mock handler
-		mockHandler := transport.HandlerFunc(func(ctx context.Context, req *transport.Request) (*transport.Response, error) {
+		mockHandler := transport.HandlerFunc(func(_ context.Context, req *transport.Request) (*transport.Response, error) {
 			// Verify request is unchanged
 			if req == nil {
 				return nil, fmt.Errorf("request is nil")
@@ -666,15 +664,15 @@ func TestProperty_MiddlewareCompositionPreservesTypes(t *testing.T) {
 		if err == nil {
 			// Success case - should have response
 			return resp != nil
-		} else {
-			// Error case - should be RateLimitError for rate limiting middleware
-			var rateLimitErr *llmerrors.RateLimitError
-			if errors.As(err, &rateLimitErr) {
-				return resp == nil // Rate limit error should have nil response
-			}
-			// Other errors are not expected but not property violations
-			return true
 		}
+
+		// Error case - should be RateLimitError for rate limiting middleware
+		var rateLimitErr *llmerrors.RateLimitError
+		if errors.As(err, &rateLimitErr) {
+			return resp == nil // Rate limit error should have nil response
+		}
+		// Other errors are not expected but not property violations
+		return true
 	}
 
 	config := &quick.Config{

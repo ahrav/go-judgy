@@ -24,12 +24,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ahrav/go-judgy/internal/llm/configuration"
-	llmerrors "github.com/ahrav/go-judgy/internal/llm/errors"
-	"github.com/ahrav/go-judgy/internal/llm/transport"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/ahrav/go-judgy/internal/llm/configuration"
+	llmerrors "github.com/ahrav/go-judgy/internal/llm/errors"
+	"github.com/ahrav/go-judgy/internal/llm/transport"
 )
 
 // createTestRateLimitMiddleware creates a rate limiting middleware for testing.
@@ -213,7 +214,7 @@ func TestRateLimitMiddleware_FailOpenToDegrade(t *testing.T) {
 	// Verify initial state: degraded mode should be disabled
 	assert.False(t, rlm.globalConfig.DegradedMode.Load(), "Initial state should not be degraded")
 
-	// Note: Comprehensive malformed Redis response testing requires sophisticated
+	// Info: Comprehensive malformed Redis response testing requires sophisticated
 	// mock infrastructure beyond unit test scope. Integration tests provide
 	// better coverage for Redis error scenarios and response validation.
 	//

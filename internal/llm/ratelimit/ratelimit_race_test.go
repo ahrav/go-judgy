@@ -32,11 +32,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/ahrav/go-judgy/internal/llm/configuration"
 	llmerrors "github.com/ahrav/go-judgy/internal/llm/errors"
 	"github.com/ahrav/go-judgy/internal/llm/transport"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 // TestRateLimitMiddleware_ConcurrentLimiterCreation validates the thread-safe
@@ -92,6 +93,7 @@ func TestRateLimitMiddleware_ConcurrentLimiterCreation(t *testing.T) {
 				// Test that limiter works
 				if !limiter.Allow() {
 					// Rate limiting is acceptable, but limiter should not be nil
+					_ = limiter // Limiter exists and is functioning
 				}
 			}
 		}(i)
@@ -153,7 +155,7 @@ func TestRateLimitMiddleware_ConcurrentCheckLocalLimit(t *testing.T) {
 	// Test concurrent rate limit checking on shared keys
 	wg.Add(numGoroutines)
 	for i := 0; i < numGoroutines; i++ {
-		go func(routineID int) {
+		go func(_ int) {
 			defer wg.Done()
 
 			for j := 0; j < requestsPerGoroutine; j++ {
@@ -227,7 +229,7 @@ func TestRateLimitMiddleware_ConcurrentAtomicOperations(t *testing.T) {
 	// Test concurrent access to atomic DegradedMode field
 	wg.Add(numGoroutines)
 	for i := 0; i < numGoroutines; i++ {
-		go func(routineID int) {
+		go func(_ int) {
 			defer wg.Done()
 
 			for j := 0; j < operationsPerGoroutine; j++ {
@@ -362,10 +364,10 @@ func TestRateLimitMiddleware_ConcurrentCleanupOperations(t *testing.T) {
 					rlm.getOrCreateLimiter(key)
 				case 1:
 					// Check rate limit
-					checkLocalLimit(rlm, key)
+					_ = checkLocalLimit(rlm, key)
 				case 2:
 					// Read stats (involves locking)
-					rlm.GetStats()
+					_, _ = rlm.GetStats()
 				case 3:
 					// Access existing limiter
 					rlm.localMu.RLock()
@@ -423,7 +425,7 @@ func TestRateLimitMiddleware_ConcurrentStartStop(t *testing.T) {
 				// Do some work while started
 				for j := 0; j < 10; j++ {
 					key := fmt.Sprintf("concurrent-key-%d-%d", opID, j)
-					checkLocalLimit(rlm, key)
+					_ = checkLocalLimit(rlm, key)
 				}
 
 				rlm.Stop()
@@ -437,7 +439,7 @@ func TestRateLimitMiddleware_ConcurrentStartStop(t *testing.T) {
 				// More work
 				for j := 0; j < 5; j++ {
 					key := fmt.Sprintf("restart-key-%d-%d", opID, j)
-					checkLocalLimit(rlm, key)
+					_ = checkLocalLimit(rlm, key)
 				}
 
 				// Final stop
@@ -470,7 +472,7 @@ func TestRateLimitMiddleware_ConcurrentMiddlewareExecution(t *testing.T) {
 
 	// Mock handler that simulates some work
 	handlerCallCount := int64(0)
-	mockHandler := transport.HandlerFunc(func(ctx context.Context, req *transport.Request) (*transport.Response, error) {
+	mockHandler := transport.HandlerFunc(func(_ context.Context, req *transport.Request) (*transport.Response, error) {
 		atomic.AddInt64(&handlerCallCount, 1)
 		time.Sleep(time.Microsecond) // Simulate small amount of work
 		return &transport.Response{}, nil
@@ -592,14 +594,14 @@ func TestRateLimitMiddleware_ConcurrentMemoryPressure(t *testing.T) {
 				switch j % 5 {
 				case 0, 1, 2:
 					// Most common: check rate limit
-					checkLocalLimit(rlm, key)
+					_ = checkLocalLimit(rlm, key)
 				case 3:
 					// Get limiter directly
 					limiter := rlm.getOrCreateLimiter(key)
 					limiter.Allow()
 				case 4:
 					// Read operations
-					rlm.GetStats()
+					_, _ = rlm.GetStats()
 				}
 			}
 		}(i)

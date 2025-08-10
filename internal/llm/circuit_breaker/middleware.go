@@ -7,9 +7,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/redis/go-redis/v9"
+
 	llmerrors "github.com/ahrav/go-judgy/internal/llm/errors"
 	"github.com/ahrav/go-judgy/internal/llm/transport"
-	"github.com/redis/go-redis/v9"
 )
 
 // Constants for middleware configuration.

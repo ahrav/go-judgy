@@ -3,12 +3,13 @@ package workflow_test
 import (
 	"testing"
 
-	"github.com/ahrav/go-judgy/internal/domain"
-	"github.com/ahrav/go-judgy/internal/workflow"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/testsuite"
+
+	"github.com/ahrav/go-judgy/internal/domain"
+	"github.com/ahrav/go-judgy/internal/workflow"
 )
 
 // TestEvaluationWorkflow verifies that EvaluationWorkflow handles validation,

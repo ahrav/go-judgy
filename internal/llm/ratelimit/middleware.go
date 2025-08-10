@@ -22,10 +22,11 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/ahrav/go-judgy/internal/llm/configuration"
-	"github.com/ahrav/go-judgy/internal/llm/transport"
 	"github.com/redis/go-redis/v9"
 	"golang.org/x/time/rate"
+
+	"github.com/ahrav/go-judgy/internal/llm/configuration"
+	"github.com/ahrav/go-judgy/internal/llm/transport"
 )
 
 // Cleanup and lifecycle constants.
@@ -37,6 +38,11 @@ const (
 	// LimiterTTL defines the time-to-live for unused local limiters.
 	// It matches the CleanupInterval to ensure deterministic cleanup behavior.
 	LimiterTTL = 1 * time.Hour
+
+	// LimiterTTLMultiplier is used to calculate the minimum TTL for rate limiters
+	// based on the refill time. This ensures limiters stay active long enough
+	// to be effective but are cleaned up appropriately.
+	LimiterTTLMultiplier = 10
 )
 
 // rateLimitMiddleware implements dual-layer rate limiting for LLM requests.
@@ -110,7 +116,7 @@ func NewRateLimitMiddlewareWithRedis(
 	var limiterMinTTL time.Duration
 	if cfg.Local.TokensPerSecond > 0 {
 		refillTime := time.Duration(float64(cfg.Local.BurstSize)/cfg.Local.TokensPerSecond) * time.Second
-		limiterMinTTL = refillTime * 10
+		limiterMinTTL = refillTime * LimiterTTLMultiplier
 	}
 	if limiterMinTTL < time.Hour {
 		limiterMinTTL = time.Hour
@@ -183,21 +189,8 @@ func (r *rateLimitMiddleware) middleware() transport.Middleware {
 
 			// Phase 2: Global Redis-based limiting with graceful degradation.
 			if r.globalConfig.Enabled && !r.globalConfig.DegradedMode.Load() {
-				if err := checkGlobalLimit(r, ctx, key); err != nil {
-					// Handle Redis connectivity issues by switching to degraded mode.
-					if r.isRedisError(err) {
-						r.logger.Warn("Redis error, switching to degraded mode", "error", err)
-						r.globalConfig.DegradedMode.Store(true)
-						// If local limiting is disabled, enforce fallback rate limiting
-						// to prevent fail-open vulnerability when Redis is unavailable.
-						if !r.localConfig.Enabled {
-							if err := checkFallbackLimit(r, key); err != nil {
-								return nil, err
-							}
-						}
-					} else {
-						return nil, err
-					}
+				if err := r.handleGlobalLimit(ctx, key); err != nil {
+					return nil, err
 				}
 			}
 
@@ -221,6 +214,32 @@ func (r *rateLimitMiddleware) middleware() transport.Middleware {
 // limiting strategies, such as per-tenant quotas or provider-specific limits.
 func (r *rateLimitMiddleware) buildKey(req *transport.Request) string {
 	return fmt.Sprintf("%s:%s:%s:%s", req.TenantID, req.Provider, req.Model, req.Operation)
+}
+
+// handleGlobalLimit handles global rate limiting with Redis error fallback.
+// This method reduces complexity in the main middleware flow by extracting
+// the nested error handling logic.
+func (r *rateLimitMiddleware) handleGlobalLimit(ctx context.Context, key string) error {
+	err := checkGlobalLimit(r, ctx, key)
+	if err == nil {
+		return nil
+	}
+
+	// Handle Redis connectivity issues by switching to degraded mode.
+	if !r.isRedisError(err) {
+		return err
+	}
+
+	r.logger.Warn("Redis error, switching to degraded mode", "error", err)
+	r.globalConfig.DegradedMode.Store(true)
+
+	// If local limiting is disabled, enforce fallback rate limiting
+	// to prevent fail-open vulnerability when Redis is unavailable.
+	if !r.localConfig.Enabled {
+		return checkFallbackLimit(r, key)
+	}
+
+	return nil
 }
 
 // getOrCreateLimiter retrieves an existing token-bucket limiter or creates a new one.

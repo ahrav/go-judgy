@@ -2,10 +2,11 @@
 package worker
 
 import (
+	sdkworker "go.temporal.io/sdk/worker"
+
 	"github.com/ahrav/go-judgy/internal/activity"
 	"github.com/ahrav/go-judgy/internal/llm"
 	"github.com/ahrav/go-judgy/internal/workflow"
-	sdkworker "go.temporal.io/sdk/worker"
 )
 
 // RegisterAll registers all workflows and activities with the Temporal worker.

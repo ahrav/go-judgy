@@ -1,9 +1,20 @@
 package ratelimit
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/ahrav/go-judgy/internal/llm/configuration"
+)
+
+var (
+	// Validation errors for local rate limit configuration.
+	errNegativeTokensPerSecond = errors.New("invalid local rate limit: TokensPerSecond cannot be negative")
+	errNegativeBurstSize       = errors.New("invalid local rate limit: BurstSize cannot be negative")
+	errInvalidBurstSize        = errors.New("invalid local rate limit: BurstSize must be 0 when TokensPerSecond is 0")
+
+	// Validation errors for global rate limit configuration.
+	errNegativeRequestsPerSecond = errors.New("invalid global rate limit: RequestsPerSecond cannot be negative")
 )
 
 // validateRateLimitConfig performs comprehensive validation of rate limiting configuration.
@@ -15,11 +26,7 @@ func validateRateLimitConfig(cfg *configuration.RateLimitConfig) error {
 		return err
 	}
 
-	if err := validateGlobalRateLimitConfig(&cfg.Global); err != nil {
-		return err
-	}
-
-	return nil
+	return validateGlobalRateLimitConfig(&cfg.Global)
 }
 
 // validateLocalRateLimitConfig validates the local rate limit configuration.
@@ -32,13 +39,13 @@ func validateLocalRateLimitConfig(cfg configuration.LocalRateLimitConfig) error 
 	}
 
 	if cfg.TokensPerSecond < 0 {
-		return fmt.Errorf("invalid local rate limit: TokensPerSecond cannot be negative (got %f)", cfg.TokensPerSecond)
+		return fmt.Errorf("%w (got %f)", errNegativeTokensPerSecond, cfg.TokensPerSecond)
 	}
 	if cfg.BurstSize < 0 {
-		return fmt.Errorf("invalid local rate limit: BurstSize cannot be negative (got %d)", cfg.BurstSize)
+		return fmt.Errorf("%w (got %d)", errNegativeBurstSize, cfg.BurstSize)
 	}
 	if cfg.TokensPerSecond == 0 && cfg.BurstSize > 0 {
-		return fmt.Errorf("invalid local rate limit: BurstSize must be 0 when TokensPerSecond is 0")
+		return errInvalidBurstSize
 	}
 
 	return nil
@@ -53,7 +60,7 @@ func validateGlobalRateLimitConfig(cfg *configuration.GlobalRateLimitConfig) err
 	}
 
 	if cfg.RequestsPerSecond < 0 {
-		return fmt.Errorf("invalid global rate limit: RequestsPerSecond cannot be negative (got %d)", cfg.RequestsPerSecond)
+		return fmt.Errorf("%w (got %d)", errNegativeRequestsPerSecond, cfg.RequestsPerSecond)
 	}
 
 	return nil

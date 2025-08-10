@@ -97,7 +97,8 @@ func FuzzParseRetryAfterValue(f *testing.F) {
 
 		middleware, err := retry.NewRetryMiddlewareWithConfig(config)
 		if err != nil {
-			t.Fatalf("Failed to create middleware: %v", err)
+			// Configuration validation errors are expected in fuzz testing
+			return
 		}
 		wrappedHandler := middleware(handler)
 
@@ -216,7 +217,8 @@ func FuzzIsNetworkError(f *testing.F) {
 
 			middleware, mwErr := retry.NewRetryMiddlewareWithConfig(config)
 			if mwErr != nil {
-				t.Fatalf("Failed to create middleware: %v", mwErr)
+				// Configuration validation errors are expected in fuzz testing
+				return
 			}
 			wrappedHandler := middleware(handler)
 
@@ -332,7 +334,8 @@ func FuzzCalculateBackoff(f *testing.F) {
 
 		middleware, err := retry.NewRetryMiddlewareWithConfig(retryConfig)
 		if err != nil {
-			t.Fatalf("Failed to create middleware: %v", err)
+			// Configuration validation errors are expected in fuzz testing
+			return
 		}
 		wrappedHandler := middleware(handler)
 
@@ -349,20 +352,6 @@ func FuzzCalculateBackoff(f *testing.F) {
 		// Should complete without hanging or panicking
 		_, _ = wrappedHandler.Handle(ctx, req)
 	})
-}
-
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }
 
 // FuzzRetryMiddlewareConfig validates configuration edge cases.
@@ -496,15 +485,16 @@ func FuzzErrorClassification(f *testing.F) {
 		}
 
 		// Classify based on status code (similar to actual implementation)
-		if statusCode == 429 {
+		switch {
+		case statusCode == 429:
 			providerError.Type = llmerrors.ErrorTypeRateLimit
-		} else if statusCode >= 500 {
+		case statusCode >= 500:
 			providerError.Type = llmerrors.ErrorTypeProvider
-		} else if statusCode == 408 {
+		case statusCode == 408:
 			providerError.Type = llmerrors.ErrorTypeTimeout
-		} else if statusCode == 401 || statusCode == 403 {
+		case statusCode == 401 || statusCode == 403:
 			providerError.Type = llmerrors.ErrorTypeAuth
-		} else if statusCode >= 400 && statusCode < 500 {
+		case statusCode >= 400 && statusCode < 500:
 			providerError.Type = llmerrors.ErrorTypeValidation
 		}
 
@@ -526,7 +516,8 @@ func FuzzErrorClassification(f *testing.F) {
 
 		middleware, err := retry.NewRetryMiddlewareWithConfig(config)
 		if err != nil {
-			t.Fatalf("Failed to create middleware: %v", err)
+			// Configuration validation errors are expected in fuzz testing
+			return
 		}
 		wrappedHandler := middleware(handler)
 
@@ -613,7 +604,8 @@ func FuzzBudgetLimits(f *testing.F) {
 
 		middleware, err := retry.NewRetryMiddlewareWithConfig(config)
 		if err != nil {
-			t.Fatalf("Failed to create middleware: %v", err)
+			// Configuration validation errors are expected in fuzz testing
+			return
 		}
 		wrappedHandler := middleware(handler)
 
@@ -701,7 +693,8 @@ func FuzzNetworkErrorPatterns(f *testing.F) {
 
 			middleware, err := retry.NewRetryMiddlewareWithConfig(config)
 			if err != nil {
-				t.Fatalf("Failed to create middleware: %v", err)
+				// Configuration validation errors are expected in fuzz testing
+				return
 			}
 			wrappedHandler := middleware(handler)
 

@@ -5,8 +5,9 @@ import (
 	"fmt"
 	"time"
 
-	llmerrors "github.com/ahrav/go-judgy/internal/llm/errors"
 	"github.com/redis/go-redis/v9"
+
+	llmerrors "github.com/ahrav/go-judgy/internal/llm/errors"
 )
 
 // Redis configuration constants.
@@ -24,7 +25,9 @@ const (
 	RedisPoolSize = 10
 
 	// MillisecondsPerSecond defines the number of milliseconds in a second.
-	MillisecondsPerSecond = 1000
+	MillisecondsPerSecond       = 1000
+	MinRetryAfterSeconds        = 1
+	MaxRetryAfterSecondsPerHour = 3600 // Maximum 1-hour retry for safety
 
 	// DefaultInitialInterval provides a fallback for retry calculations.
 	DefaultInitialInterval = 1 * time.Second
@@ -83,7 +86,7 @@ func checkGlobalLimit(r *rateLimitMiddleware, ctx context.Context, key string) e
 	// but we check here to prevent security vulnerabilities
 	if limit < 0 {
 		r.logger.Error("negative global rate limit detected at runtime", "limit", limit)
-		return fmt.Errorf("invalid global rate limit: RequestsPerSecond cannot be negative (got %d)", limit)
+		return fmt.Errorf("%w (got %d)", errNegativeRequestsPerSecond, limit)
 	}
 
 	// Skip global limiting when disabled (RequestsPerSecond == 0).
@@ -122,11 +125,11 @@ func checkGlobalLimit(r *rateLimitMiddleware, ctx context.Context, key string) e
 		}
 
 		retryAfterSecs := int(retryAfterMs / MillisecondsPerSecond)
-		if retryAfterSecs < 1 {
-			retryAfterSecs = 1 // Minimum 1-second retry to prevent tight loops
+		if retryAfterSecs < MinRetryAfterSeconds {
+			retryAfterSecs = MinRetryAfterSeconds // Minimum 1-second retry to prevent tight loops
 		}
-		if retryAfterSecs > 3600 {
-			retryAfterSecs = 3600 // Maximum 1-hour retry for safety
+		if retryAfterSecs > MaxRetryAfterSecondsPerHour {
+			retryAfterSecs = MaxRetryAfterSecondsPerHour // Maximum 1-hour retry for safety
 		}
 
 		return &llmerrors.RateLimitError{

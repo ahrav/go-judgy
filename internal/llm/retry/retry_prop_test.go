@@ -120,7 +120,7 @@ func TestExponentialBackoffProperties(t *testing.T) {
 							break
 						}
 					}
-					// Note: This is a simplified check since actual jitter implementation varies
+					// Info: This is a simplified check since actual jitter implementation varies
 					t.Logf("Jitter test completed with %d samples, all same: %v", len(jitterBackoffs), allSame)
 				}
 			}
@@ -528,11 +528,9 @@ func TestErrorClassificationProperties(t *testing.T) {
 				if attempts > int64(config.MaxAttempts) {
 					t.Errorf("exceeded max attempts: %d > %d", attempts, config.MaxAttempts)
 				}
-			} else {
+			} else if attempts != 1 {
 				// Should have exactly one attempt
-				if attempts != 1 {
-					t.Errorf("expected no retries for non-retryable error, got %d attempts", attempts)
-				}
+				t.Errorf("expected no retries for non-retryable error, got %d attempts", attempts)
 			}
 		})
 	}
@@ -686,7 +684,7 @@ func TestRetryMiddlewareIdempotencyProperties(t *testing.T) {
 	}
 
 	// Property 3: All runs should have similar durations (without jitter)
-	var minDuration, maxDuration time.Duration = durations[0], durations[0]
+	minDuration, maxDuration := durations[0], durations[0]
 	for _, d := range durations[1:] {
 		if d < minDuration {
 			minDuration = d

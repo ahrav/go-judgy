@@ -449,7 +449,8 @@ func BenchmarkNetworkErrorDetection(b *testing.B) {
 		"bad request",
 	}
 
-	allErrors := append(networkErrors, nonNetworkErrors...)
+	networkErrors = append(networkErrors, nonNetworkErrors...)
+	allErrors := networkErrors
 
 	config := configuration.RetryConfig{
 		MaxAttempts:     2,
@@ -664,12 +665,13 @@ func BenchmarkContextCancellation(b *testing.B) {
 				var ctx context.Context
 				var cancel context.CancelFunc
 
-				if scenario.timeoutAfter > 0 {
+				switch {
+				case scenario.timeoutAfter > 0:
 					ctx, cancel = context.WithTimeout(context.Background(), scenario.timeoutAfter)
-				} else if scenario.cancelImmediately {
+				case scenario.cancelImmediately:
 					ctx, cancel = context.WithCancel(context.Background())
 					cancel() // Cancel immediately
-				} else {
+				default:
 					ctx = context.Background()
 				}
 

@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
-	"net/http"
 	"net/url"
 	"strings"
 	"time"
@@ -19,8 +18,20 @@ import (
 	"github.com/ahrav/go-judgy/internal/llm/transport"
 )
 
-// contextKey prevents key collisions in context value storage.
-type contextKey string
+var (
+	// Configuration validation errors.
+	errMaxAttemptsInvalid     = errors.New("maxAttempts must be greater than 0")
+	errInitialIntervalInvalid = errors.New("initialInterval must be greater than 0")
+	errMaxIntervalInvalid     = errors.New("maxInterval must be >= initialInterval")
+	errMultiplierInvalid      = errors.New("multiplier must be >= 1.0")
+	errMaxElapsedTimeInvalid  = errors.New("maxElapsedTime must be >= 0")
+
+	// Runtime errors.
+	errContextCancelledBeforeRetry = errors.New("context cancelled before retry")
+	errContextCancelledDuringRetry = errors.New("context cancelled during retry")
+	errAllRetriesExhausted         = errors.New("all retries exhausted")
+	errUnexpectedRetryExhaustion   = errors.New("unexpected retry exhaustion")
+)
 
 // retryMiddleware implements intelligent retry logic with exponential backoff.
 // Handles transient failures with configurable retry policies and respects
@@ -46,19 +57,19 @@ type RetryAfterProvider interface {
 // and respects provider rate limit headers.
 func NewRetryMiddlewareWithConfig(cfg configuration.RetryConfig) (transport.Middleware, error) {
 	if cfg.MaxAttempts <= 0 {
-		return nil, fmt.Errorf("MaxAttempts must be greater than 0, got %d", cfg.MaxAttempts)
+		return nil, fmt.Errorf("%w, got %d", errMaxAttemptsInvalid, cfg.MaxAttempts)
 	}
 	if cfg.InitialInterval <= 0 {
-		return nil, fmt.Errorf("InitialInterval must be greater than 0, got %v", cfg.InitialInterval)
+		return nil, fmt.Errorf("%w, got %v", errInitialIntervalInvalid, cfg.InitialInterval)
 	}
 	if cfg.MaxInterval < cfg.InitialInterval {
-		return nil, fmt.Errorf("MaxInterval (%v) must be >= InitialInterval (%v)", cfg.MaxInterval, cfg.InitialInterval)
+		return nil, fmt.Errorf("%w, MaxInterval: %v, InitialInterval: %v", errMaxIntervalInvalid, cfg.MaxInterval, cfg.InitialInterval)
 	}
 	if cfg.Multiplier < 1.0 {
-		return nil, fmt.Errorf("Multiplier must be >= 1.0, got %f", cfg.Multiplier)
+		return nil, fmt.Errorf("%w, got %f", errMultiplierInvalid, cfg.Multiplier)
 	}
 	if cfg.MaxElapsedTime < 0 {
-		return nil, fmt.Errorf("MaxElapsedTime must be >= 0, got %v", cfg.MaxElapsedTime)
+		return nil, fmt.Errorf("%w, got %v", errMaxElapsedTimeInvalid, cfg.MaxElapsedTime)
 	}
 
 	return newRetryMiddleware(cfg), nil
@@ -88,7 +99,7 @@ func (r *retryMiddleware) middleware() transport.Middleware {
 			// Fail fast if context is already cancelled to avoid wasted retry attempts.
 			select {
 			case <-ctx.Done():
-				return nil, fmt.Errorf("context cancelled before retry: %w", ctx.Err())
+				return nil, fmt.Errorf("%w: %w", errContextCancelledBeforeRetry, ctx.Err())
 			default:
 			}
 
@@ -222,7 +233,7 @@ func (r *retryMiddleware) middleware() transport.Middleware {
 				case <-time.After(backoff):
 					// Continue to next attempt.
 				case <-ctx.Done():
-					return nil, fmt.Errorf("context cancelled during retry: %w", ctx.Err())
+					return nil, fmt.Errorf("%w: %w", errContextCancelledDuringRetry, ctx.Err())
 				}
 			}
 
@@ -230,11 +241,11 @@ func (r *retryMiddleware) middleware() transport.Middleware {
 			if lastErr != nil {
 				r.stats.failedRetries.Add(1)
 				// Return partial response with wrapped error for debugging context.
-				return lastResp, fmt.Errorf("all retries exhausted after %d attempts: %w",
-					maxAttempts, lastErr)
+				return lastResp, fmt.Errorf("%w after %d attempts: %w",
+					errAllRetriesExhausted, maxAttempts, lastErr)
 			}
 
-			return nil, errors.New("unexpected retry exhaustion")
+			return nil, errUnexpectedRetryExhaustion
 		})
 	}
 }
@@ -289,25 +300,6 @@ func (r *retryMiddleware) isRetryable(err error) bool {
 	return false
 }
 
-// isRetryableStatus checks if an HTTP status code indicates a retryable error.
-func (r *retryMiddleware) isRetryableStatus(status int) bool {
-	switch status {
-	case http.StatusTooManyRequests, // 429
-		http.StatusRequestTimeout,     // 408
-		http.StatusBadGateway,         // 502
-		http.StatusServiceUnavailable, // 503
-		http.StatusGatewayTimeout:     // 504
-		return true
-	case http.StatusInternalServerError: // 500
-		// Some 500s are retryable, some aren't.
-		// Default to retryable for resilience.
-		return true
-	default:
-		// 4xx errors (except those above) are generally not retryable.
-		return status >= 500
-	}
-}
-
 // isNetworkError checks if an error is a network-related error using proper type assertions.
 // This provides robust network error detection without fragile string matching.
 func isNetworkError(err error) bool {
@@ -325,15 +317,16 @@ func isNetworkError(err error) bool {
 
 	var urlErr *url.Error
 	if errors.As(err, &urlErr) {
-		if netErr, ok := urlErr.Err.(net.Error); ok {
-			return netErr.Temporary()
+		var netErr net.Error
+		if errors.As(urlErr.Err, &netErr) {
+			return netErr.Timeout()
 		}
 		return isNetworkErrorByString(urlErr.Err.Error())
 	}
 
 	var netErr net.Error
 	if errors.As(err, &netErr) {
-		return netErr.Temporary() || netErr.Timeout()
+		return netErr.Timeout()
 	}
 
 	return isNetworkErrorByString(err.Error())

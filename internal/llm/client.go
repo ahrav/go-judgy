@@ -90,7 +90,7 @@ func (a *configArtifactStoreAdapter) Exists(ctx context.Context, ref domain.Arti
 	}
 	_, err := a.store.Get(ctx, ref)
 	if err != nil {
-		return false, nil // Assume not found if Get fails.
+		return false, err // Return the error instead of assuming not found
 	}
 	return true, nil
 }
@@ -263,7 +263,7 @@ func NewClient(cfg *configuration.Config) (Client, error) {
 	}
 
 	if cfg.Cache.Enabled {
-		cacheMiddleware, err := cache.NewCacheMiddlewareWithRedis(cfg.Cache, nil)
+		cacheMiddleware, err := cache.NewCacheMiddlewareWithRedis(context.Background(), cfg.Cache, nil)
 		if err != nil {
 			return nil, fmt.Errorf("failed to initialize cache: %w", err)
 		}

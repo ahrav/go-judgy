@@ -221,7 +221,7 @@ func TestRateLimitMiddleware_RedisNetwork_Failures(t *testing.T) {
 	assert.NotNil(t, resp)
 
 	// Simulate network failure by closing client connections
-	// Note: This is a more realistic test but might be flaky
+	// Info: This is a more realistic test but might be flaky
 	// In practice, network failures are handled by connection retries
 
 	// Test with context timeout (simulates network delay)

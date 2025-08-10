@@ -6,6 +6,7 @@ package circuit_breaker_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -76,7 +77,8 @@ func FuzzCircuitBreakerBuildKey(f *testing.F) {
 		}
 
 		// Verify error is of expected type
-		if _, ok := err.(*llmerrors.ProviderError); !ok {
+		var provErr *llmerrors.ProviderError
+		if !errors.As(err, &provErr) {
 			t.Errorf("unexpected error type: %T", err)
 		}
 
@@ -103,9 +105,11 @@ func FuzzCircuitBreakerBuildKey(f *testing.F) {
 		}
 
 		// If circuit is open or limit reached, both should get the same error
-		if perr2, ok := err2.(*llmerrors.ProviderError); ok {
+		var perr2 *llmerrors.ProviderError
+		if errors.As(err2, &perr2) {
 			if perr2.Code == "CIRCUIT_OPEN" || perr2.Code == "CIRCUIT_BREAKER_LIMIT" {
-				if perr3, ok := err3.(*llmerrors.ProviderError); !ok || perr3.Code != perr2.Code {
+				var perr3 *llmerrors.ProviderError
+				if !errors.As(err3, &perr3) || perr3.Code != perr2.Code {
 					t.Errorf("inconsistent circuit state for same key: %s vs %s", perr2.Code, perr3.Code)
 				}
 			}
@@ -287,7 +291,8 @@ func FuzzAdaptiveThresholds(f *testing.F) {
 		for i := 0; i < totalRequests; i++ {
 			_, err := cbHandler.Handle(ctx, req)
 			if err != nil {
-				if perr, ok := err.(*llmerrors.ProviderError); ok && perr.Code == "CIRCUIT_OPEN" {
+				var perr *llmerrors.ProviderError
+				if errors.As(err, &perr) && perr.Code == "CIRCUIT_OPEN" {
 					circuitOpen = true
 					break
 				}
@@ -302,6 +307,7 @@ func FuzzAdaptiveThresholds(f *testing.F) {
 			if errorRate > 0.5 && !circuitOpen && failures >= baseThreshold {
 				// High error rate should trigger circuit opening
 				// This is expected behavior, not an error
+				_ = errorRate // Acknowledge high error rate condition
 			}
 
 			// Verify no panic or unexpected behavior
@@ -466,19 +472,23 @@ func FuzzMaxBreakersLimit(f *testing.F) {
 			if err == nil {
 				successCount++
 				breakerKeys[fmt.Sprintf("provider-%d:model", i)] = true
-			} else if perr, ok := err.(*llmerrors.ProviderError); ok && perr.Code == "CIRCUIT_BREAKER_LIMIT" {
-				limitErrorCount++
-				// Verify error message quality
-				if !strings.Contains(perr.Message, "limit reached") {
-					t.Errorf("error message should mention limit: %s", perr.Message)
-				}
 			} else {
-				t.Errorf("unexpected error: %v", err)
+				var perr *llmerrors.ProviderError
+				if errors.As(err, &perr) && perr.Code == "CIRCUIT_BREAKER_LIMIT" {
+					limitErrorCount++
+					// Verify error message quality
+					if !strings.Contains(perr.Message, "limit reached") {
+						t.Errorf("error message should mention limit: %s", perr.Message)
+					}
+				} else {
+					t.Errorf("unexpected error: %v", err)
+				}
 			}
 		}
 
 		// Verify expectations
-		if maxBreakers == 0 {
+		switch {
+		case maxBreakers == 0:
 			// No limit, all should succeed
 			if successCount != numRequests {
 				t.Errorf("with no limit, expected all %d to succeed, got %d", numRequests, successCount)
@@ -486,7 +496,7 @@ func FuzzMaxBreakersLimit(f *testing.F) {
 			if limitErrorCount != 0 {
 				t.Errorf("with no limit, expected no limit errors, got %d", limitErrorCount)
 			}
-		} else if numRequests <= maxBreakers {
+		case numRequests <= maxBreakers:
 			// Under limit, all should succeed
 			if successCount != numRequests {
 				t.Errorf("under limit, expected all %d to succeed, got %d", numRequests, successCount)
@@ -494,7 +504,7 @@ func FuzzMaxBreakersLimit(f *testing.F) {
 			if limitErrorCount != 0 {
 				t.Errorf("under limit, expected no limit errors, got %d", limitErrorCount)
 			}
-		} else {
+		default:
 			// Over limit, exactly maxBreakers should succeed
 			if successCount != maxBreakers {
 				t.Errorf("over limit, expected exactly %d to succeed, got %d", maxBreakers, successCount)

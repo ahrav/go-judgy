@@ -11,11 +11,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/ahrav/go-judgy/internal/domain"
 	"github.com/ahrav/go-judgy/internal/llm/configuration"
 	llmerrors "github.com/ahrav/go-judgy/internal/llm/errors"
 	"github.com/ahrav/go-judgy/internal/llm/transport"
-	"github.com/google/uuid"
 )
 
 // Logging constants define limits and settings for observability.
@@ -23,6 +24,8 @@ const (
 	// ContentTruncationLimit specifies the maximum number of characters
 	// to include from a response content in logs before truncating.
 	ContentTruncationLimit = 200
+	// MilliCentsToCentsConversion converts milli-cents to cents for cost tracking.
+	MilliCentsToCentsConversion = 1000
 )
 
 // Metrics provides an interface for collecting observability data from LLM
@@ -359,7 +362,7 @@ func (o *observabilityMiddleware) middleware() transport.Middleware {
 					o.stats.TotalTokens += resp.Usage.TotalTokens
 
 					// Track costs (convert from milli-cents to cents)
-					o.stats.TotalCostCents += resp.EstimatedCostMilliCents / 10
+					o.stats.TotalCostCents += resp.EstimatedCostMilliCents / MilliCentsToCentsConversion
 
 					// Track by finish reason
 					status := string(resp.FinishReason)

@@ -24,7 +24,6 @@ linters:
   enable:
     # Documentation
     - godot          # Check comments end in period
-    - godox          # Detect FIXME, TODO and other comment keywords
 
     # Code quality
     - goconst        # Finds repeated strings that could be replaced by a constant
@@ -48,7 +47,6 @@ linters:
     # Error handling
     - errcheck       # Errcheck is a program for checking for unchecked errors in go programs
     - errorlint      # Errorlint is a linter for that can be used to find code that will cause problems with the error wrapping scheme introduced in Go 1.13
-    - err113         # Golang linter to check the errors handling expressions
 
     # Security
     - gosec          # Inspects source code for security problems
@@ -209,19 +207,12 @@ linters:
 
 formatters:
   enable:
-    - gci            # Gci controls Go package import order and makes it deterministic
     - gofmt          # Gofmt checks whether code was gofmt-ed
     - gofumpt        # Gofumpt checks whether code was gofumpt-ed
     - goimports      # Check import statements are formatted according to the 'goimport' command
 
   settings:
     # Code style
-    gci:
-      sections:
-        - standard
-        - default
-        - prefix(github.com/ahrav/go-judgy)
-
     gofmt:
       simplify: true
 

@@ -455,8 +455,8 @@ func TestRetryMiddleware_ConcurrentBudgetTrackingSync(t *testing.T) {
 			Multiplier:      2.0,
 			UseJitter:       false,
 			EnableBudget:    true,
-			MaxCostCents:    20,   // Very low to trigger quickly  
-			MaxTokens:       500,  // Very low to trigger quickly
+			MaxCostCents:    20,  // Very low to trigger quickly
+			MaxTokens:       500, // Very low to trigger quickly
 		}
 
 		const tokensPerCall = 1000
@@ -465,16 +465,16 @@ func TestRetryMiddleware_ConcurrentBudgetTrackingSync(t *testing.T) {
 		handler := transport.HandlerFunc(func(_ context.Context, _ *transport.Request) (*transport.Response, error) {
 			// Always return usage info with error to test budget tracking
 			return &transport.Response{
-				Content:                 "partial",
-				FinishReason:            domain.FinishStop,
-				Usage:                   transport.NormalizedUsage{TotalTokens: tokensPerCall},
-				EstimatedCostMilliCents: costPerCall * 10, // Convert to milli-cents
-			}, &llmerrors.ProviderError{
-				Provider:   "test",
-				StatusCode: 500,
-				Message:    "server error",
-				Type:       llmerrors.ErrorTypeProvider,
-			}
+					Content:                 "partial",
+					FinishReason:            domain.FinishStop,
+					Usage:                   transport.NormalizedUsage{TotalTokens: tokensPerCall},
+					EstimatedCostMilliCents: costPerCall * 10, // Convert to milli-cents
+				}, &llmerrors.ProviderError{
+					Provider:   "test",
+					StatusCode: 500,
+					Message:    "server error",
+					Type:       llmerrors.ErrorTypeProvider,
+				}
 		})
 
 		middleware, err := retry.NewRetryMiddlewareWithConfig(config)
@@ -602,13 +602,13 @@ func TestRetryMiddleware_ConcurrentCircuitBreakerInteractionSync(t *testing.T) {
 				cbErrors++
 				continue
 			}
-			
+
 			// Check for provider errors (either direct or wrapped)
 			if _, ok := err.(*llmerrors.ProviderError); ok {
 				providerErrors++
 				continue
 			}
-			
+
 			// Check if it's a wrapped error from retry exhaustion
 			if strings.Contains(err.Error(), "all retries exhausted") {
 				retryExhaustedErrors++
@@ -621,10 +621,10 @@ func TestRetryMiddleware_ConcurrentCircuitBreakerInteractionSync(t *testing.T) {
 		// Provider errors get retried and may appear as "all retries exhausted"
 		total := cbErrors + providerErrors + retryExhaustedErrors
 		assert.Equal(t, numGoroutines, total, "expected all requests to return errors")
-		
+
 		// Should have some circuit breaker errors (non-retryable, direct)
 		assert.Greater(t, cbErrors, 0, "expected some circuit breaker errors")
-		
+
 		// Should have some retries exhausted (from provider errors that were retried)
 		assert.Greater(t, retryExhaustedErrors, 0, "expected some retries exhausted errors")
 	})
@@ -637,7 +637,7 @@ func TestRetryMiddleware_ConcurrentContextCancellationSync(t *testing.T) {
 		config := configuration.RetryConfig{
 			MaxAttempts:     5,
 			MaxElapsedTime:  10 * time.Second,
-			InitialInterval: 1 * time.Second,  // Realistic delay
+			InitialInterval: 1 * time.Second, // Realistic delay
 			MaxInterval:     2 * time.Second,
 			Multiplier:      2.0,
 			UseJitter:       false,
@@ -674,10 +674,10 @@ func TestRetryMiddleware_ConcurrentContextCancellationSync(t *testing.T) {
 			wg.Add(1)
 			go func(id int) {
 				defer wg.Done()
-				
+
 				// Create context with deterministic timeout based on goroutine ID
 				// This ensures some contexts cancel during first attempt, others during backoff
-				timeout := time.Duration(500 + id*100) * time.Millisecond
+				timeout := time.Duration(500+id*100) * time.Millisecond
 				ctx, cancel := context.WithTimeout(context.Background(), timeout)
 				defer cancel()
 

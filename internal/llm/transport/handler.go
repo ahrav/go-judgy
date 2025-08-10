@@ -59,7 +59,7 @@ func Chain(h Handler, middlewares ...Middleware) Handler {
 	return h
 }
 
-// HTTPHandler creates the core handler that makes actual HTTP requests.
+// NewHTTPHandler creates the core handler that makes actual HTTP requests.
 // This will be constructed by the client with concrete router and validator.
 func NewHTTPHandler(client *http.Client, router Router, validator Validator) Handler {
 	return &httpHandler{

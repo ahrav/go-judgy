@@ -15,6 +15,13 @@ type requestBudget struct {
 	enabled   bool
 }
 
+const (
+	// DefaultMaxAttempts is the default number of retry attempts for non-idempotent operations.
+	DefaultMaxAttempts = 3
+	// MilliCentsToCentsConversion converts milli-cents to cents for budget tracking.
+	MilliCentsToCentsConversion = 1000
+)
+
 // GetActivityOptions returns Temporal activity options configured for retry coordination.
 // Prevents conflicts between HTTP-level retries and activity-level retries.
 func GetActivityOptions(isIdempotent bool) map[string]any {
@@ -30,7 +37,7 @@ func GetActivityOptions(isIdempotent bool) map[string]any {
 	// Non-idempotent: activity retries only, no HTTP retries.
 	return map[string]any{
 		"RetryPolicy": map[string]any{
-			"MaximumAttempts":        3,
+			"MaximumAttempts":        DefaultMaxAttempts,
 			"NonRetryableErrorTypes": []string{"ValidationError", "AuthError"},
 		},
 		"StartToCloseTimeout": "5m",
@@ -71,7 +78,7 @@ func (r *retryMiddleware) updateBudgetFromResponse(budget *requestBudget, resp *
 
 	// Add cost from this attempt for budget tracking.
 	if resp.EstimatedCostMilliCents > 0 {
-		costCents := resp.EstimatedCostMilliCents / 1000 // Convert milli-cents to cents for budget tracking.
+		costCents := resp.EstimatedCostMilliCents / MilliCentsToCentsConversion // Convert milli-cents to cents for budget tracking.
 		budget.costCents += costCents
 		r.stats.totalCostCents.Add(costCents)
 	}

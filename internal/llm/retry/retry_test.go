@@ -20,6 +20,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// contextKey is an unexported type for context keys to prevent external forgery.
+type contextKey struct{}
+
+// circuitBreakerProbeKey is the context key for circuit breaker half-open probe indication.
+var circuitBreakerProbeKey = contextKey{}
+
 // TestNewRetryMiddlewareWithConfig validates the behavior of the retry middleware constructor.
 // It verifies proper initialization with a comprehensive configuration,
 // including timing parameters, jitter settings, and budget enforcement options.
@@ -406,7 +412,7 @@ func TestRetryMiddleware_CircuitBreakerIntegration(t *testing.T) {
 			})
 
 			// Test with half-open probe context
-			ctxWithProbe := context.WithValue(ctx, "circuit_breaker_half_open_probe", true)
+			ctxWithProbe := context.WithValue(ctx, circuitBreakerProbeKey, true)
 
 			middleware, err := retry.NewRetryMiddlewareWithConfig(config)
 			if err != nil {
@@ -947,11 +953,9 @@ func TestParseRetryAfterValue(t *testing.T) {
 				if elapsed < expectedDelay {
 					t.Errorf("expected delay >= %v, got %v", expectedDelay, elapsed)
 				}
-			} else {
+			} else if elapsed > 500*time.Millisecond {
 				// Should use normal backoff (much shorter)
-				if elapsed > 500*time.Millisecond {
-					t.Errorf("expected short delay, got %v", elapsed)
-				}
+				t.Errorf("expected short delay, got %v", elapsed)
 			}
 		})
 	}

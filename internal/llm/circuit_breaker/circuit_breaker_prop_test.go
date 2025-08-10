@@ -4,6 +4,7 @@ package circuit_breaker_test
 
 import (
 	"context"
+	"errors"
 	"math/rand"
 	"sync"
 	"sync/atomic"
@@ -72,7 +73,8 @@ func TestCircuitBreakerStateInvariants(t *testing.T) {
 			// Track state based on error
 			mu.Lock()
 			if err != nil {
-				if perr, ok := err.(*llmerrors.ProviderError); ok {
+				var perr *llmerrors.ProviderError
+				if errors.As(err, &perr) {
 					switch perr.Code {
 					case "CIRCUIT_OPEN":
 						stateHistory = append(stateHistory, "open")
@@ -177,7 +179,8 @@ func TestCircuitBreakerThresholdInvariants(t *testing.T) {
 		for i := 0; i < 100; i++ {
 			_, err := cbHandler.Handle(ctx, req)
 			if err != nil {
-				if perr, ok := err.(*llmerrors.ProviderError); ok && perr.Code == "CIRCUIT_OPEN" {
+				var perr *llmerrors.ProviderError
+				if errors.As(err, &perr) && perr.Code == "CIRCUIT_OPEN" {
 					circuitOpened.Store(true)
 					break
 				}
@@ -210,6 +213,7 @@ func TestCircuitBreakerThresholdInvariants(t *testing.T) {
 			if errorRateActual > 0.5 && !circuitOpened.Load() && failures > int32(baseThreshold) {
 				// High error rate but circuit didn't open despite many failures
 				// This might be OK if failures are spread out over time
+				_ = errorRateActual // Acknowledge high error rate condition
 			}
 		}
 
@@ -325,7 +329,8 @@ func TestCircuitBreakerProbeCounterInvariants(t *testing.T) {
 					successfulProbes.Add(1)
 				} else {
 					totalErrors.Add(1)
-					if perr, ok := err.(*llmerrors.ProviderError); ok && perr.Code == "CIRCUIT_HALF_OPEN_LIMIT" {
+					var perr *llmerrors.ProviderError
+					if errors.As(err, &perr) && perr.Code == "CIRCUIT_HALF_OPEN_LIMIT" {
 						rejectedProbes.Add(1)
 					}
 				}
@@ -503,7 +508,8 @@ func TestCircuitBreakerTimeoutBehavior(t *testing.T) {
 				transitioned = true
 				break
 			}
-			if perr, ok := err.(*llmerrors.ProviderError); ok && perr.Code != "CIRCUIT_OPEN" {
+			var perr *llmerrors.ProviderError
+			if errors.As(err, &perr) && perr.Code != "CIRCUIT_OPEN" {
 				transitioned = true
 				break
 			}
@@ -534,11 +540,7 @@ func TestCircuitBreakerTimeoutBehavior(t *testing.T) {
 
 		// Property: Total execution time is reasonable
 		totalTime := time.Since(startTime)
-		if totalTime > maxWait*2 {
-			return false
-		}
-
-		return true
+		return totalTime <= maxWait*2
 	}
 
 	config := &quick.Config{
@@ -717,14 +719,16 @@ func TestCircuitBreakerKeyConsistency(t *testing.T) {
 		}
 
 		// Check if circuit is open
-		if perr, ok := err3.(*llmerrors.ProviderError); ok && perr.Code == "CIRCUIT_OPEN" {
+		var perr *llmerrors.ProviderError
+		if errors.As(err3, &perr) && perr.Code == "CIRCUIT_OPEN" {
 			// All other requests should also get CIRCUIT_OPEN
 			for i := 3; i < len(requests); i++ {
 				_, err := failCBHandler.Handle(ctx, requests[i])
 				if err == nil {
 					return false
 				}
-				if perr, ok := err.(*llmerrors.ProviderError); !ok || perr.Code != "CIRCUIT_OPEN" {
+				var perr *llmerrors.ProviderError
+				if !errors.As(err, &perr) || perr.Code != "CIRCUIT_OPEN" {
 					return false // Should be same circuit state
 				}
 			}

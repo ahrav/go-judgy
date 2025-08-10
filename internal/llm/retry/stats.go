@@ -19,9 +19,9 @@ type retryStats struct {
 	budgetExceeded          atomic.Int64 // Count of requests exceeding budget limits
 }
 
-// RetryStats holds aggregated metrics for retry middleware activity.
+// Stats holds aggregated metrics for retry middleware activity.
 // It provides a snapshot of retry behavior for monitoring and observability.
-type RetryStats struct {
+type Stats struct {
 	// TotalAttempts is the total number of requests, including initial attempts and all retries.
 	TotalAttempts int64 `json:"total_attempts"`
 	// SuccessfulRetries is the count of requests that succeeded only after one or more retries.
@@ -55,9 +55,9 @@ func (r *retryMiddleware) recordBackoffMetrics(backoff time.Duration) {
 	}
 }
 
-// GetRetryStats returns a snapshot of the current retry statistics for this
+// GetStats returns a snapshot of the current retry statistics for this
 // middleware instance.
-func (r *retryMiddleware) GetRetryStats() *RetryStats {
+func (r *retryMiddleware) GetStats() *Stats {
 	totalAttempts := r.stats.totalAttempts.Load()
 	successfulRetries := r.stats.successfulRetries.Load()
 	failedRetries := r.stats.failedRetries.Load()
@@ -67,13 +67,13 @@ func (r *retryMiddleware) GetRetryStats() *RetryStats {
 	totalTokens := r.stats.totalTokens.Load()
 	budgetExceeded := r.stats.budgetExceeded.Load()
 
-	var averageAttempts float64 = 1.0
+	averageAttempts := 1.0
 	// Include all requests: first-attempt successes, retry successes, and failures.
 	if totalRequests := successfulFirstAttempts + successfulRetries + failedRetries; totalRequests > 0 {
 		averageAttempts = float64(totalAttempts) / float64(totalRequests)
 	}
 
-	return &RetryStats{
+	return &Stats{
 		TotalAttempts:     totalAttempts,
 		SuccessfulRetries: successfulRetries,
 		FailedRetries:     failedRetries,
@@ -85,11 +85,11 @@ func (r *retryMiddleware) GetRetryStats() *RetryStats {
 	}
 }
 
-// GetGlobalRetryStats returns global retry statistics across all middleware instances.
+// GetGlobalStats returns global retry statistics across all middleware instances.
 // This would typically interface with a metrics system like Prometheus.
-func GetGlobalRetryStats() *RetryStats {
+func GetGlobalStats() *Stats {
 	// Future: Implement global stats aggregation from metrics system
-	return &RetryStats{
+	return &Stats{
 		AverageAttempts: 1.0,
 	}
 }

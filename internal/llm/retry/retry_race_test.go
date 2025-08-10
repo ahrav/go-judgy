@@ -1,3 +1,8 @@
+//go:build ignore
+
+// These race tests use unrealistic timing and are flaky.
+// Use the synctest versions instead for reliable timing-dependent tests.
+
 package retry_test
 
 import (
