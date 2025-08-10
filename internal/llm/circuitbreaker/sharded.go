@@ -73,16 +73,22 @@ func (sb *shardedBreakers) getOrCreate(
 		return breaker, nil
 	}
 
-	if maxBreakers > 0 && int(sb.total.Load()) >= maxBreakers {
-		return nil, &llmerrors.ProviderError{
-			Code:    "CIRCUIT_BREAKER_LIMIT",
-			Message: fmt.Sprintf("circuit breaker limit reached (%d), cannot create new breaker for key: %s", maxBreakers, key),
-			Type:    llmerrors.ErrorTypeCircuitBreaker,
+	// Atomically check and increment total to prevent race conditions.
+	if maxBreakers > 0 {
+		newTotal := sb.total.Add(1)
+		if int(newTotal) > maxBreakers {
+			sb.total.Add(-1) // Rollback the increment
+			return nil, &llmerrors.ProviderError{
+				Code:    "CIRCUIT_BREAKER_LIMIT",
+				Message: fmt.Sprintf("circuit breaker limit reached (%d), cannot create new breaker for key: %s", maxBreakers, key),
+				Type:    llmerrors.ErrorTypeCircuitBreaker,
+			}
 		}
+	} else {
+		sb.total.Add(1)
 	}
 
 	breaker := create()
 	shard.breakers[key] = breaker
-	sb.total.Add(1)
 	return breaker, nil
 }

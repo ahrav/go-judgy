@@ -1176,10 +1176,6 @@ func TestCircuitBreaker_EdgeCases(t *testing.T) {
 				OpenTimeout:      0,
 			},
 			test: func(_ *testing.T, cbHandler transport.Handler) {
-				// Info: Zero timeout causes divide by zero in getJitter
-				// This is a bug in the implementation that needs fixing
-				// For now, we'll skip this test
-				t.Skip("Zero timeout causes divide by zero - implementation bug")
 
 				// Should transition to half-open immediately
 				req := &transport.Request{
