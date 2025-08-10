@@ -15,15 +15,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/redis/go-redis/v9"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-
 	"github.com/ahrav/go-judgy/internal/domain"
 	"github.com/ahrav/go-judgy/internal/llm/configuration"
 	llmerrors "github.com/ahrav/go-judgy/internal/llm/errors"
 	"github.com/ahrav/go-judgy/internal/llm/ratelimit"
 	"github.com/ahrav/go-judgy/internal/llm/transport"
+	"github.com/redis/go-redis/v9"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestNewRateLimitMiddlewareWithRedis_Comprehensive validates the creation of the

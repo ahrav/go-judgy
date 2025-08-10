@@ -32,12 +32,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-
 	"github.com/ahrav/go-judgy/internal/llm/configuration"
 	llmerrors "github.com/ahrav/go-judgy/internal/llm/errors"
 	"github.com/ahrav/go-judgy/internal/llm/transport"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestRateLimitMiddleware_ConcurrentLimiterCreation validates the thread-safe

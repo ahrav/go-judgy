@@ -264,7 +264,6 @@ func TestRetryMiddlewareSuccessProperties(t *testing.T) {
 
 			ctx := context.Background()
 			resp, err := wrappedHandler.Handle(ctx, req)
-
 			// Property 1: Should succeed
 			if err != nil {
 				t.Fatalf("expected success, got error: %v", err)

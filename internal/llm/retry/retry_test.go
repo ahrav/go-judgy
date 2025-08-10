@@ -11,14 +11,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-
 	"github.com/ahrav/go-judgy/internal/domain"
 	"github.com/ahrav/go-judgy/internal/llm/configuration"
 	llmerrors "github.com/ahrav/go-judgy/internal/llm/errors"
 	"github.com/ahrav/go-judgy/internal/llm/retry"
 	"github.com/ahrav/go-judgy/internal/llm/transport"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestNewRetryMiddlewareWithConfig validates the behavior of the retry middleware constructor.
@@ -1473,7 +1472,7 @@ func TestPartialResponseWithError(t *testing.T) {
 	// Should have error
 	require.Error(t, err)
 
-	// BUG: Partial response should be returned but isn't
+	// Issue: Partial response should be returned but isn't
 	// This assertion will FAIL with current implementation
 	assert.NotNil(t, resp, "partial response should be preserved")
 	if resp != nil {
@@ -1527,7 +1526,7 @@ func TestContextAlreadyCancelled(t *testing.T) {
 	_, err = wrappedHandler.Handle(ctx, req)
 	require.Error(t, err)
 
-	// BUG: Should not make any attempts with cancelled context
+	// Issue: Should not make any attempts with cancelled context
 	// This assertion will FAIL with current implementation
 	assert.Equal(t, int32(0), atomic.LoadInt32(&callCount),
 		"should not attempt request with already-cancelled context")

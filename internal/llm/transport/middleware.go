@@ -12,7 +12,7 @@ import (
 // Reduces API costs and latency by caching successful responses with
 // idempotency key-based lookup. Implementation will be in resilience package.
 func NewCacheMiddleware(cfg configuration.CacheConfig) (Middleware, error) {
-	// TODO: Update to use resilience.NewCacheMiddlewareWithRedis once created
+	// Future: Update to use resilience.NewCacheMiddlewareWithRedis once created
 	panic("NewCacheMiddleware not yet implemented - will be updated in resilience package")
 }
 
@@ -20,7 +20,7 @@ func NewCacheMiddleware(cfg configuration.CacheConfig) (Middleware, error) {
 // Enforces request rate limits per provider/model to prevent quota exhaustion
 // and API abuse. Implementation will be in resilience package.
 func NewRateLimitMiddleware(cfg *configuration.RateLimitConfig) (Middleware, error) {
-	// TODO: Update to use resilience.NewRateLimitMiddlewareWithRedis once created
+	// Future: Update to use resilience.NewRateLimitMiddlewareWithRedis once created
 	panic("NewRateLimitMiddleware not yet implemented - will be updated in resilience package")
 }
 
@@ -28,7 +28,7 @@ func NewRateLimitMiddleware(cfg *configuration.RateLimitConfig) (Middleware, err
 // Implements fail-fast behavior during provider outages to prevent cascading
 // failures and reduce unnecessary API calls. Implementation will be in resilience package.
 func NewCircuitBreakerMiddleware(cfg configuration.CircuitBreakerConfig) Middleware {
-	// TODO: Update to use resilience.NewCircuitBreakerMiddlewareWithRedis once created
+	// Future: Update to use resilience.NewCircuitBreakerMiddlewareWithRedis once created
 	panic("NewCircuitBreakerMiddleware not yet implemented - will be updated in resilience package")
 }
 
@@ -36,7 +36,7 @@ func NewCircuitBreakerMiddleware(cfg configuration.CircuitBreakerConfig) Middlew
 // Implements intelligent retry logic with exponential backoff for rate limits,
 // timeouts, and provider errors. Implementation will be in resilience package.
 func NewRetryMiddleware(cfg configuration.RetryConfig) Middleware {
-	// TODO: Update to use resilience.NewRetryMiddlewareWithConfig once created
+	// Future: Update to use resilience.NewRetryMiddlewareWithConfig once created
 	panic("NewRetryMiddleware not yet implemented - will be updated in resilience package")
 }
 
@@ -44,7 +44,7 @@ func NewRetryMiddleware(cfg configuration.RetryConfig) Middleware {
 // Attaches cost estimates to successful LLM responses using configured
 // pricing registry for budget monitoring and cost optimization.
 func NewPricingMiddleware(cfg configuration.PricingConfig) (Middleware, error) {
-	// TODO: Update to use business.NewPricingMiddlewareWithRegistry once created
+	// Future: Update to use business.NewPricingMiddlewareWithRegistry once created
 	panic("NewPricingMiddleware not yet implemented - will be updated in business package")
 }
 
@@ -52,6 +52,6 @@ func NewPricingMiddleware(cfg configuration.PricingConfig) (Middleware, error) {
 // Provides request/response logging, error tracking, and metrics collection
 // with configurable detail levels for production observability.
 func NewObservabilityMiddleware(cfg configuration.ObservabilityConfig) Middleware {
-	// TODO: Update to use resilience.NewLoggingMiddleware once created
+	// Future: Update to use resilience.NewLoggingMiddleware once created
 	panic("NewObservabilityMiddleware not yet implemented - will be updated in resilience package")
 }

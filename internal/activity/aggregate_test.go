@@ -5,11 +5,10 @@ import (
 	"context"
 	"testing"
 
+	"github.com/ahrav/go-judgy/internal/domain"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/sdk/temporal"
-
-	"github.com/ahrav/go-judgy/internal/domain"
 )
 
 // TestAggregateScores verifies that AggregateScores returns proper error handling

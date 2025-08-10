@@ -17,12 +17,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/redis/go-redis/v9"
-
 	"github.com/ahrav/go-judgy/internal/domain"
 	"github.com/ahrav/go-judgy/internal/llm/configuration"
 	"github.com/ahrav/go-judgy/internal/llm/ratelimit"
 	"github.com/ahrav/go-judgy/internal/llm/transport"
+	"github.com/redis/go-redis/v9"
 )
 
 // BenchmarkRateLimitMiddleware_FullMiddlewareChain measures the performance of the

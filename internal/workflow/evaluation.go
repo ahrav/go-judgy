@@ -6,10 +6,9 @@ package workflow
 import (
 	"time"
 
+	"github.com/ahrav/go-judgy/internal/domain"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
-
-	"github.com/ahrav/go-judgy/internal/domain"
 )
 
 // Activity configuration constants for consistent timeout and retry behavior.

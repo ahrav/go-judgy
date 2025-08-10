@@ -22,11 +22,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/redis/go-redis/v9"
-	"golang.org/x/time/rate"
-
 	"github.com/ahrav/go-judgy/internal/llm/configuration"
 	"github.com/ahrav/go-judgy/internal/llm/transport"
+	"github.com/redis/go-redis/v9"
+	"golang.org/x/time/rate"
 )
 
 // Cleanup and lifecycle constants.

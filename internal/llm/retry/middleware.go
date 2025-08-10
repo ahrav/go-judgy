@@ -251,6 +251,11 @@ func (r *retryMiddleware) isRetryable(err error) bool {
 	// Check specific error types BEFORE checking RetryAfterProvider interface
 	// to ensure proper error classification takes precedence.
 
+	var circuitBreakerErr *llmerrors.CircuitBreakerError
+	if errors.As(err, &circuitBreakerErr) {
+		return false // Circuit breaker errors are non-retryable
+	}
+
 	var rateLimitErr *llmerrors.RateLimitError
 	if errors.As(err, &rateLimitErr) {
 		return true // Always retry rate limits.

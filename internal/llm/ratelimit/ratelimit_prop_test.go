@@ -35,12 +35,11 @@ import (
 	"testing/quick"
 	"time"
 
-	"github.com/redis/go-redis/v9"
-	"github.com/stretchr/testify/require"
-
 	"github.com/ahrav/go-judgy/internal/llm/configuration"
 	llmerrors "github.com/ahrav/go-judgy/internal/llm/errors"
 	"github.com/ahrav/go-judgy/internal/llm/transport"
+	"github.com/redis/go-redis/v9"
+	"github.com/stretchr/testify/require"
 )
 
 // TestProperty_RateLimitingDeterminism validates deterministic rate limiting behavior.
@@ -268,7 +267,7 @@ func TestProperty_AtomicTimestampMonotonicity(t *testing.T) {
 	}
 }
 
-// Property: Cleanup operations preserve active limiters
+// Property: Cleanup operations preserve active limiters.
 func TestProperty_CleanupPreservesActiveLimiters(t *testing.T) {
 	property := func(activeKeys, staleKeys int) bool {
 		// Keep reasonable bounds
@@ -338,7 +337,7 @@ func TestProperty_CleanupPreservesActiveLimiters(t *testing.T) {
 	}
 }
 
-// Property: Rate limit errors contain valid retry information
+// Property: Rate limit errors contain valid retry information.
 func TestProperty_RateLimitErrorValidation(t *testing.T) {
 	property := func(tokensPerSecond float64, burstSize int) bool {
 		// Skip invalid configurations
@@ -428,7 +427,8 @@ func TestProperty_RateLimitErrorValidation(t *testing.T) {
 //   - Consistent behavior across multiple key generation calls
 func TestProperty_KeyGenerationBijective(t *testing.T) {
 	property := func(tenant1, provider1, model1, operation1,
-		tenant2, provider2, model2, operation2 string) bool {
+		tenant2, provider2, model2, operation2 string,
+	) bool {
 		cfg := configuration.RateLimitConfig{}
 		rlm := createTestRateLimitMiddleware(&cfg)
 
@@ -466,7 +466,7 @@ func TestProperty_KeyGenerationBijective(t *testing.T) {
 	}
 }
 
-// Property: Statistics are consistent with actual state
+// Property: Statistics are consistent with actual state.
 func TestProperty_StatisticsConsistency(t *testing.T) {
 	property := func(keyCount int) bool {
 		// Keep reasonable bounds
@@ -528,7 +528,7 @@ func TestProperty_StatisticsConsistency(t *testing.T) {
 	}
 }
 
-// Property: Redis error detection is consistent
+// Property: Redis error detection is consistent.
 func TestProperty_RedisErrorDetectionConsistency(t *testing.T) {
 	cfg := configuration.RateLimitConfig{}
 	rlm := createTestRateLimitMiddleware(&cfg)
@@ -580,7 +580,7 @@ func TestProperty_RedisErrorDetectionConsistency(t *testing.T) {
 	}
 }
 
-// Property: Configuration bounds are respected
+// Property: Configuration bounds are respected.
 func TestProperty_ConfigurationBoundsRespected(t *testing.T) {
 	property := func(tokensPerSecond float64, burstSize int, requestsPerSecond int) bool {
 		// Test that extreme values are handled gracefully
@@ -598,7 +598,6 @@ func TestProperty_ConfigurationBoundsRespected(t *testing.T) {
 
 		// Creating middleware should not panic with any configuration
 		middleware, err := NewRateLimitMiddlewareWithRedis(&cfg, nil)
-
 		// Some configurations might be invalid, that's OK
 		if err != nil {
 			return true // Not a property violation
@@ -624,7 +623,7 @@ func TestProperty_ConfigurationBoundsRespected(t *testing.T) {
 	}
 }
 
-// Property: Middleware composition preserves request/response types
+// Property: Middleware composition preserves request/response types.
 func TestProperty_MiddlewareCompositionPreservesTypes(t *testing.T) {
 	cfg := &configuration.RateLimitConfig{
 		Local: configuration.LocalRateLimitConfig{

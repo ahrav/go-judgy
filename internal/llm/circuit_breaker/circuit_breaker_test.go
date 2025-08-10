@@ -1512,9 +1512,9 @@ func TestCircuitBreaker_ErrorTypeInconsistency(t *testing.T) {
 		t.Errorf("expected CIRCUIT_OPEN code, got: %s", openProvErr.Code)
 	}
 
-	// BUG: This should be ErrorTypeCircuitBreaker but is ErrorTypeProvider (line 261)
+	// Issue: This should be ErrorTypeCircuitBreaker but is ErrorTypeProvider (line 261)
 	if openProvErr.Type != llmerrors.ErrorTypeCircuitBreaker {
-		t.Errorf("BUG DETECTED: Open state error has wrong type. Expected %s, got %s",
+		t.Errorf("Issue DETECTED: Open state error has wrong type. Expected %s, got %s",
 			llmerrors.ErrorTypeCircuitBreaker, openProvErr.Type)
 		t.Logf("This demonstrates the inconsistency: Open state uses ErrorTypeProvider")
 		t.Logf("While Half-open limit correctly uses ErrorTypeCircuitBreaker")

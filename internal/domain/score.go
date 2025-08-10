@@ -4,11 +4,11 @@
 // auditable evaluation of generated content.
 //
 // Scoring Architecture:
-//   - Judge-based evaluation with provider abstraction
-//   - Artifact-based reasoning storage for audit trails
-//   - Statistical aggregation with validity filtering
-//   - Resource tracking for budget compliance
-//   - Comprehensive error handling and recovery
+//   - Judge-based evaluation with provider abstraction.
+//   - Artifact-based reasoning storage for audit trails.
+//   - Statistical aggregation with validity filtering.
+//   - Resource tracking for budget compliance.
+//   - Comprehensive error handling and recovery.
 //
 // Integration with Evaluation Processes:
 //   - ScoreAnswers operation: Evaluates multiple answers using configured judges

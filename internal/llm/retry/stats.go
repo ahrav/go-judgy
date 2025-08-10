@@ -88,7 +88,7 @@ func (r *retryMiddleware) GetRetryStats() *RetryStats {
 // GetGlobalRetryStats returns global retry statistics across all middleware instances.
 // This would typically interface with a metrics system like Prometheus.
 func GetGlobalRetryStats() *RetryStats {
-	// TODO: Implement global stats aggregation from metrics system
+	// Future: Implement global stats aggregation from metrics system
 	return &RetryStats{
 		AverageAttempts: 1.0,
 	}

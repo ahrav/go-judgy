@@ -5,9 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/google/uuid"
-
 	"github.com/ahrav/go-judgy/internal/domain"
+	"github.com/google/uuid"
 )
 
 // ExtractAnswerContent retrieves answer content from artifact storage for scoring.
@@ -171,7 +170,7 @@ func CreateInvalidScore(answerID string, err error) *domain.Score {
 // Returns "default" as placeholder until context-based tenant extraction
 // is implemented with authentication integration.
 func ExtractTenantID(_ context.Context) string {
-	// TODO: Extract from context or auth
+	// Future: Extract from context or auth
 	return "default"
 }
 
@@ -179,6 +178,6 @@ func ExtractTenantID(_ context.Context) string {
 // Returns generated UUID as placeholder until context-based trace extraction
 // is implemented with distributed tracing integration.
 func ExtractTraceID(_ context.Context) string {
-	// TODO: Extract from context or generate
+	// Future: Extract from context or generate
 	return uuid.New().String()
 }

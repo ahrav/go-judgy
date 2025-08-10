@@ -5,9 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/redis/go-redis/v9"
-
 	llmerrors "github.com/ahrav/go-judgy/internal/llm/errors"
+	"github.com/redis/go-redis/v9"
 )
 
 // Redis configuration constants.

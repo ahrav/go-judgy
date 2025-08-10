@@ -5,9 +5,8 @@ import (
 	"math"
 	"time"
 
-	"golang.org/x/time/rate"
-
 	llmerrors "github.com/ahrav/go-judgy/internal/llm/errors"
+	"golang.org/x/time/rate"
 )
 
 // DefaultRateLimit provides a fallback rate when a configuration is missing.

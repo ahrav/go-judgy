@@ -11,12 +11,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
-
 	"github.com/ahrav/go-judgy/internal/domain"
 	"github.com/ahrav/go-judgy/internal/llm/configuration"
 	llmerrors "github.com/ahrav/go-judgy/internal/llm/errors"
 	"github.com/ahrav/go-judgy/internal/llm/transport"
+	"github.com/google/uuid"
 )
 
 // Logging constants define limits and settings for observability.

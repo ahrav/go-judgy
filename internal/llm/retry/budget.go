@@ -76,4 +76,3 @@ func (r *retryMiddleware) updateBudgetFromResponse(budget *requestBudget, resp *
 		r.stats.totalCostCents.Add(costCents)
 	}
 }
-

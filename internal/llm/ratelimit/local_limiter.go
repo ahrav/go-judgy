@@ -4,9 +4,8 @@ import (
 	"math"
 	"sync/atomic"
 
-	"golang.org/x/time/rate"
-
 	llmerrors "github.com/ahrav/go-judgy/internal/llm/errors"
+	"golang.org/x/time/rate"
 )
 
 // timedLimiter wraps a rate limiter with an atomic timestamp.
