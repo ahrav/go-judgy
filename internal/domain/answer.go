@@ -216,6 +216,10 @@ type GenerateAnswersOutput struct {
 	// Used for budget reconciliation via BudgetClient.CommitSync.
 	CostCents Cents `json:"cost_cents" validate:"min=0"`
 
+	// ClientIdemKey is the canonical idempotency key from the LLM client.
+	// Used as the single source of truth for event deduplication and caching.
+	ClientIdemKey string `json:"client_idem_key,omitempty"`
+
 	// Error contains the failure reason if no answers were successfully generated.
 	Error string `json:"error,omitempty"`
 }

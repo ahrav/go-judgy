@@ -42,6 +42,11 @@ const (
 	PricingValidFor         = 24 * time.Hour
 )
 
+// Concurrency constants.
+const (
+	DefaultMaxConcurrency = 5 // Maximum concurrent requests for answer generation
+)
+
 // DefaultConfig returns production-ready configuration with sensible defaults.
 // Provides balanced settings for resilience, performance, and cost control
 // suitable for production workloads without additional configuration.
@@ -99,6 +104,7 @@ func DefaultConfig() *Config {
 			DisableCBProbeGuard: false,
 			DisableJSONRepair:   false,
 		},
+		MaxConcurrency: DefaultMaxConcurrency,
 	}
 }
 

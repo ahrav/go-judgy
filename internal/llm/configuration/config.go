@@ -53,6 +53,9 @@ type Config struct {
 
 	// Feature flags
 	Features FeatureFlags `json:"features"`
+
+	// Concurrency configuration
+	MaxConcurrency int `json:"max_concurrency"`
 }
 
 // ProviderConfig holds provider-specific configuration and authentication.

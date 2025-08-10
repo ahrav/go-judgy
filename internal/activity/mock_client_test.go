@@ -5,7 +5,10 @@ import (
 	"fmt"
 	"sync/atomic"
 
+	"github.com/google/uuid"
+
 	"github.com/ahrav/go-judgy/internal/domain"
+	"github.com/ahrav/go-judgy/internal/llm/transport"
 )
 
 // mockLLMClient provides controllable LLM client behavior for testing activities.
@@ -26,7 +29,7 @@ type mockLLMClient struct {
 // Generate simulates LLM answer generation with controllable error behavior.
 // Returns configurable errors or minimal valid responses for testing activity logic.
 func (m *mockLLMClient) Generate(
-	_ context.Context, _ domain.GenerateAnswersInput,
+	ctx context.Context, input domain.GenerateAnswersInput,
 ) (*domain.GenerateAnswersOutput, error) {
 	atomic.AddInt64(&m.generateCalls, 1)
 
@@ -39,11 +42,33 @@ func (m *mockLLMClient) Generate(
 		return nil, fmt.Errorf("GenerateAnswers not implemented: %w", ErrNotImplemented)
 	}
 
+	// CRITICAL: Generate proper idempotency key just like real client
+	// Use deterministic tenant ID for testing based on input to ensure same input = same key
+	tenantID := "test-tenant-deterministic"
+	req := &transport.Request{
+		Operation:   transport.OpGeneration,
+		Provider:    input.Config.Provider,
+		Model:       input.Config.Model,
+		TenantID:    tenantID,
+		Question:    input.Question,
+		MaxTokens:   input.Config.MaxAnswerTokens,
+		Temperature: input.Config.Temperature,
+	}
+
+	canonicalKey, err := transport.GenerateIdemKey(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate idem key: %w", err)
+	}
+
 	// Return a valid output with minimal data and content in metadata
 	return &domain.GenerateAnswersOutput{
 		Answers: []domain.Answer{
 			{
-				ID: "test-answer-1",
+				ID: uuid.New().String(), // Proper UUID
+				AnswerProvenance: domain.AnswerProvenance{
+					Provider: "mock",
+					Model:    "mock-model",
+				},
 				ContentRef: domain.ArtifactRef{
 					// Leave empty so storeAnswerContent will handle storage
 					Key:  "",
@@ -54,9 +79,10 @@ func (m *mockLLMClient) Generate(
 				},
 			},
 		},
-		TokensUsed: 100,
-		CallsMade:  1,
-		CostCents:  domain.Cents(25), // 25 cents
+		TokensUsed:    100,
+		CallsMade:     1,
+		CostCents:     domain.Cents(25),      // 25 cents
+		ClientIdemKey: canonicalKey.String(), // ← RETURN THE KEY!
 	}, nil
 }
 
