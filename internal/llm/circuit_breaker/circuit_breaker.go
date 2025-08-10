@@ -84,6 +84,21 @@ func (s CircuitState) String() string {
 	}
 }
 
+// CircuitResult represents the outcome of a circuit breaker request evaluation.
+// It encapsulates the request decision, required cleanup operations, and probe state
+// to provide clear semantics for circuit breaker operations and eliminate parameter confusion
+// in method signatures while maintaining thread-safe probe management.
+type CircuitResult struct {
+	// Allowed indicates whether the circuit breaker permits the request to proceed.
+	Allowed bool
+	// Cleanup is the function that must be called when the request completes to properly
+	// manage probe counters and maintain accurate half-open state tracking.
+	Cleanup func()
+	// IsHalfOpenProbe indicates if this request is a half-open probe, used to eliminate
+	// race conditions and coordinate distributed probe testing with Redis.
+	IsHalfOpenProbe bool
+}
+
 // adaptiveThresholds manages dynamic threshold adjustment based on error rates.
 // It implements a sliding window algorithm that adjusts failure thresholds based on
 // historical error patterns, enabling more sensitive detection during high error periods
@@ -283,17 +298,21 @@ func newCircuitBreaker(cfg CircuitBreakerConfig) *circuitBreaker {
 
 // handleHalfOpenProbe manages the half-open probe logic shared by StateOpen and StateHalfOpen.
 // It handles probe slot allocation, cleanup function creation, and metrics tracking.
-// Returns allowed status, cleanup function, probe status, and error.
-func (cb *circuitBreaker) handleHalfOpenProbe() (bool, func(), bool, error) {
+// Returns a CircuitResult containing the request decision and required cleanup operations.
+func (cb *circuitBreaker) handleHalfOpenProbe() (*CircuitResult, error) {
 	for {
 		current := cb.halfOpenProbes.Load()
 		if int(current) >= cb.maxHalfOpenProbes {
 			cb.metrics.requestsRejected.Add(1)
-			return false, func() {}, false, &llmerrors.ProviderError{
-				Code:    "CIRCUIT_HALF_OPEN_LIMIT",
-				Message: "half-open probe limit reached",
-				Type:    llmerrors.ErrorTypeCircuitBreaker,
-			}
+			return &CircuitResult{
+					Allowed:         false,
+					Cleanup:         func() {},
+					IsHalfOpenProbe: false,
+				}, &llmerrors.ProviderError{
+					Code:    "CIRCUIT_HALF_OPEN_LIMIT",
+					Message: "half-open probe limit reached",
+					Type:    llmerrors.ErrorTypeCircuitBreaker,
+				}
 		}
 		if cb.halfOpenProbes.CompareAndSwap(current, current+1) {
 			// Create cleanup function to release the in-flight slot
@@ -311,24 +330,32 @@ func (cb *circuitBreaker) handleHalfOpenProbe() (bool, func(), bool, error) {
 			}
 			cb.metrics.probeAttempts.Add(1)
 			cb.metrics.requestsAllowed.Add(1)
-			return true, cleanup, true, nil
+			return &CircuitResult{
+				Allowed:         true,
+				Cleanup:         cleanup,
+				IsHalfOpenProbe: true,
+			}, nil
 		}
 	}
 }
 
 // allow checks if a request should be allowed through based on circuit state.
-// Returns allowed status, cleanup function, probe status, and error.
+// Returns a CircuitResult containing the request decision and required cleanup operations.
 // The cleanup function must be called when the request completes to properly
 // manage probe counters and maintain accurate half-open state tracking across
 // concurrent operations. The probe status indicates if this request is a
 // half-open probe to eliminate race conditions.
-func (cb *circuitBreaker) allow() (bool, func(), bool, error) {
+func (cb *circuitBreaker) allow() (*CircuitResult, error) {
 	state := CircuitState(cb.state.Load())
 
 	switch state {
 	case StateClosed:
 		cb.metrics.requestsAllowed.Add(1)
-		return true, func() {}, false, nil
+		return &CircuitResult{
+			Allowed:         true,
+			Cleanup:         func() {},
+			IsHalfOpenProbe: false,
+		}, nil
 
 	case StateOpen, StateHalfOpen:
 		// For StateOpen, check timeout and transition if ready
@@ -338,11 +365,15 @@ func (cb *circuitBreaker) allow() (bool, func(), bool, error) {
 			timeout := cb.openTimeout + cb.getJitter()
 			if time.Since(lastFailure) <= timeout {
 				cb.metrics.requestsRejected.Add(1)
-				return false, func() {}, false, &llmerrors.ProviderError{
-					Code:    "CIRCUIT_OPEN",
-					Message: "circuit breaker is open",
-					Type:    llmerrors.ErrorTypeCircuitBreaker,
-				}
+				return &CircuitResult{
+						Allowed:         false,
+						Cleanup:         func() {},
+						IsHalfOpenProbe: false,
+					}, &llmerrors.ProviderError{
+						Code:    "CIRCUIT_OPEN",
+						Message: "circuit breaker is open",
+						Type:    llmerrors.ErrorTypeCircuitBreaker,
+					}
 			}
 			cb.transitionTo(StateHalfOpen)
 		}
@@ -351,7 +382,11 @@ func (cb *circuitBreaker) allow() (bool, func(), bool, error) {
 		return cb.handleHalfOpenProbe()
 
 	default:
-		return false, func() {}, false, fmt.Errorf("%w: %v", ErrUnknownCircuitState, state)
+		return &CircuitResult{
+			Allowed:         false,
+			Cleanup:         func() {},
+			IsHalfOpenProbe: false,
+		}, fmt.Errorf("%w: %v", ErrUnknownCircuitState, state)
 	}
 }
 
@@ -615,13 +650,13 @@ func (c *circuitBreakerMiddleware) middleware() transport.Middleware {
 				return nil, err
 			}
 
-			allowed, cleanup, isHalfOpenProbe, err := breaker.allow()
-			if !allowed {
+			result, err := breaker.allow()
+			if err != nil || !result.Allowed {
 				return nil, err
 			}
-			defer cleanup()
+			defer result.Cleanup()
 
-			if isHalfOpenProbe && c.probeGuardEnabled {
+			if result.IsHalfOpenProbe && c.probeGuardEnabled {
 				if !c.acquireProbeGuard(ctx, key) {
 					if breaker.metrics != nil {
 						breaker.metrics.probeGuardConflicts.Add(1)
@@ -636,7 +671,7 @@ func (c *circuitBreakerMiddleware) middleware() transport.Middleware {
 			}
 
 			requestCtx := ctx
-			if isHalfOpenProbe {
+			if result.IsHalfOpenProbe {
 				requestCtx = context.WithValue(ctx, halfOpenProbeKey, true)
 			}
 			resp, err := next.Handle(requestCtx, req)
