@@ -1,4 +1,4 @@
-package circuit_breaker
+package circuitbreaker
 
 import (
 	"sync/atomic"
@@ -42,8 +42,8 @@ func (m *circuitBreakerMetrics) updateStateTime(currentState CircuitState) {
 	m.lastStateChange.Store(now)
 }
 
-// CircuitBreakerStats provides comprehensive circuit breaker performance metrics.
-type CircuitBreakerStats struct {
+// Stats provides comprehensive circuit breaker performance metrics.
+type Stats struct {
 	// TotalBreakers is the total number of active circuit breakers.
 	TotalBreakers int `json:"total_breakers"`
 	// StateCount maps each circuit state to the number of breakers in that state.

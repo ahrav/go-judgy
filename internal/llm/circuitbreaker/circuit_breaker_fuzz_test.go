@@ -1,7 +1,7 @@
 //go:build go1.18
 // +build go1.18
 
-package circuit_breaker_test
+package circuitbreaker_test
 
 import (
 	"context"
@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ahrav/go-judgy/internal/llm/circuit_breaker"
+	"github.com/ahrav/go-judgy/internal/llm/circuitbreaker"
 	llmerrors "github.com/ahrav/go-judgy/internal/llm/errors"
 	"github.com/ahrav/go-judgy/internal/llm/transport"
 )
@@ -37,7 +37,7 @@ func FuzzCircuitBreakerBuildKey(f *testing.F) {
 
 	f.Fuzz(func(t *testing.T, provider, model, region string) {
 		ctx := context.Background()
-		config := circuit_breaker.CircuitBreakerConfig{
+		config := circuitbreaker.Config{
 			FailureThreshold: 2,
 			SuccessThreshold: 1,
 			HalfOpenProbes:   1,
@@ -67,7 +67,7 @@ func FuzzCircuitBreakerBuildKey(f *testing.F) {
 			}
 		})
 
-		cbMiddleware, _ := circuit_breaker.NewCircuitBreakerMiddlewareWithRedis(config, nil)
+		cbMiddleware, _ := circuitbreaker.NewCircuitBreakerMiddlewareWithRedis(config, nil)
 		cbHandler := cbMiddleware(handler)
 
 		// Execute request - should not panic
@@ -142,7 +142,7 @@ func FuzzCircuitBreakerConfig(f *testing.F) {
 
 	f.Fuzz(func(t *testing.T, configJSON string) {
 		// Try to parse the configuration
-		var config circuit_breaker.CircuitBreakerConfig
+		var config circuitbreaker.Config
 		err := json.Unmarshal([]byte(configJSON), &config)
 
 		// If parsing succeeds, verify the configuration is usable
@@ -150,7 +150,7 @@ func FuzzCircuitBreakerConfig(f *testing.F) {
 			ctx := context.Background()
 
 			// Create middleware with parsed config
-			cbMiddleware, _ := circuit_breaker.NewCircuitBreakerMiddlewareWithRedis(config, nil)
+			cbMiddleware, _ := circuitbreaker.NewCircuitBreakerMiddlewareWithRedis(config, nil)
 
 			// Create a simple handler
 			handler := transport.HandlerFunc(func(_ context.Context, _ *transport.Request) (*transport.Response, error) {
@@ -199,7 +199,7 @@ func FuzzCircuitBreakerConfig(f *testing.F) {
 				t.Errorf("failed to serialize valid config: %v", err)
 			}
 
-			var config2 circuit_breaker.CircuitBreakerConfig
+			var config2 circuitbreaker.Config
 			if err := json.Unmarshal(serialized, &config2); err != nil {
 				t.Errorf("round-trip serialization failed: %v", err)
 			}
@@ -235,7 +235,7 @@ func FuzzAdaptiveThresholds(f *testing.F) {
 		}
 
 		ctx := context.Background()
-		config := circuit_breaker.CircuitBreakerConfig{
+		config := circuitbreaker.Config{
 			FailureThreshold:   baseThreshold,
 			SuccessThreshold:   1,
 			HalfOpenProbes:     1,
@@ -276,7 +276,7 @@ func FuzzAdaptiveThresholds(f *testing.F) {
 			}, nil
 		})
 
-		cbMiddleware, _ := circuit_breaker.NewCircuitBreakerMiddlewareWithRedis(config, nil)
+		cbMiddleware, _ := circuitbreaker.NewCircuitBreakerMiddlewareWithRedis(config, nil)
 		cbHandler := cbMiddleware(handler)
 
 		req := &transport.Request{
@@ -367,7 +367,7 @@ func FuzzHashDistribution(f *testing.F) {
 
 		// Test that the key works in actual circuit breaker
 		ctx := context.Background()
-		config := circuit_breaker.CircuitBreakerConfig{
+		config := circuitbreaker.Config{
 			FailureThreshold: 1,
 			SuccessThreshold: 1,
 			HalfOpenProbes:   1,
@@ -407,7 +407,7 @@ func FuzzHashDistribution(f *testing.F) {
 			}, nil
 		})
 
-		cbMiddleware, _ := circuit_breaker.NewCircuitBreakerMiddlewareWithRedis(config, nil)
+		cbMiddleware, _ := circuitbreaker.NewCircuitBreakerMiddlewareWithRedis(config, nil)
 		cbHandler := cbMiddleware(handler)
 
 		// Should not panic with any key
@@ -440,7 +440,7 @@ func FuzzMaxBreakersLimit(f *testing.F) {
 		}
 
 		ctx := context.Background()
-		config := circuit_breaker.CircuitBreakerConfig{
+		config := circuitbreaker.Config{
 			FailureThreshold: 2,
 			SuccessThreshold: 1,
 			HalfOpenProbes:   1,
@@ -452,7 +452,7 @@ func FuzzMaxBreakersLimit(f *testing.F) {
 			return &transport.Response{Content: "success"}, nil
 		})
 
-		cbMiddleware, _ := circuit_breaker.NewCircuitBreakerMiddlewareWithRedis(config, nil)
+		cbMiddleware, _ := circuitbreaker.NewCircuitBreakerMiddlewareWithRedis(config, nil)
 		cbHandler := cbMiddleware(handler)
 
 		successCount := 0
@@ -560,7 +560,7 @@ func FuzzConcurrentOperations(f *testing.F) {
 		}
 
 		ctx := context.Background()
-		config := circuit_breaker.CircuitBreakerConfig{
+		config := circuitbreaker.Config{
 			FailureThreshold: 2,
 			SuccessThreshold: 2,
 			HalfOpenProbes:   halfOpenProbes,
@@ -584,7 +584,7 @@ func FuzzConcurrentOperations(f *testing.F) {
 			}, nil
 		})
 
-		cbMiddleware, _ := circuit_breaker.NewCircuitBreakerMiddlewareWithRedis(config, nil)
+		cbMiddleware, _ := circuitbreaker.NewCircuitBreakerMiddlewareWithRedis(config, nil)
 		cbHandler := cbMiddleware(handler)
 
 		req := &transport.Request{

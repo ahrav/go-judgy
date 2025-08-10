@@ -118,7 +118,7 @@ func TestMiddlewareOrder_ObservabilitySeesAllEvents(t *testing.T) {
 
 	// Mock circuit breaker that denies request
 	cbMiddleware := func(_ transport.Handler) transport.Handler {
-		return transport.HandlerFunc(func(ctx context.Context, req *transport.Request) (*transport.Response, error) {
+		return transport.HandlerFunc(func(_ context.Context, _ *transport.Request) (*transport.Response, error) {
 			obsEvents = append(obsEvents, "cb_open")
 			return nil, &llmerrors.WorkflowError{
 				Type:    llmerrors.ErrorTypeRateLimit,
@@ -129,7 +129,7 @@ func TestMiddlewareOrder_ObservabilitySeesAllEvents(t *testing.T) {
 
 	// Mock rate limit that denies request
 	rlMiddleware := func(_ transport.Handler) transport.Handler {
-		return transport.HandlerFunc(func(ctx context.Context, req *transport.Request) (*transport.Response, error) {
+		return transport.HandlerFunc(func(_ context.Context, _ *transport.Request) (*transport.Response, error) {
 			obsEvents = append(obsEvents, "rl_denied")
 			return nil, &llmerrors.RateLimitError{
 				Provider:   "test",
@@ -390,8 +390,8 @@ func TestMiddlewareOrder_CacheBypassesRetry(t *testing.T) {
 	})
 
 	// Cache middleware that always returns cache hit
-	cacheMiddleware := func(next transport.Handler) transport.Handler {
-		return transport.HandlerFunc(func(ctx context.Context, req *transport.Request) (*transport.Response, error) {
+	cacheMiddleware := func(_ transport.Handler) transport.Handler {
+		return transport.HandlerFunc(func(_ context.Context, _ *transport.Request) (*transport.Response, error) {
 			// Always return cache hit, never call next
 			return &transport.Response{
 				Content:      "from cache",

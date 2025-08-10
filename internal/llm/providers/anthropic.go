@@ -1,3 +1,4 @@
+// Package providers implements LLM provider adapters for various cloud services.
 package providers
 
 import (

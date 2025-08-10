@@ -1,3 +1,6 @@
+// Package configuration provides configuration structures and utilities for the LLM client.
+// It defines configuration types for various middleware components including cache,
+// circuit breaker, rate limiting, retry logic, and transport settings.
 package configuration
 
 import (

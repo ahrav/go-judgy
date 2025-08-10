@@ -1,4 +1,4 @@
-package circuit_breaker_test
+package circuitbreaker_test
 
 import (
 	"context"
@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/ahrav/go-judgy/internal/domain"
-	"github.com/ahrav/go-judgy/internal/llm/circuit_breaker"
+	"github.com/ahrav/go-judgy/internal/llm/circuitbreaker"
 	llmerrors "github.com/ahrav/go-judgy/internal/llm/errors"
 	"github.com/ahrav/go-judgy/internal/llm/transport"
 )
@@ -24,12 +24,12 @@ func BenchmarkCircuitBreakerAllow(b *testing.B) {
 
 	configs := []struct {
 		name   string
-		config circuit_breaker.CircuitBreakerConfig
+		config circuitbreaker.Config
 		state  string // "closed", "open", "half-open"
 	}{
 		{
 			name: "closed_state",
-			config: circuit_breaker.CircuitBreakerConfig{
+			config: circuitbreaker.Config{
 				FailureThreshold: 5,
 				SuccessThreshold: 2,
 				HalfOpenProbes:   3,
@@ -39,7 +39,7 @@ func BenchmarkCircuitBreakerAllow(b *testing.B) {
 		},
 		{
 			name: "open_state",
-			config: circuit_breaker.CircuitBreakerConfig{
+			config: circuitbreaker.Config{
 				FailureThreshold: 1,
 				SuccessThreshold: 2,
 				HalfOpenProbes:   3,
@@ -49,7 +49,7 @@ func BenchmarkCircuitBreakerAllow(b *testing.B) {
 		},
 		{
 			name: "half_open_state",
-			config: circuit_breaker.CircuitBreakerConfig{
+			config: circuitbreaker.Config{
 				FailureThreshold: 1,
 				SuccessThreshold: 100, // Keep in half-open
 				HalfOpenProbes:   10,
@@ -70,7 +70,7 @@ func BenchmarkCircuitBreakerAllow(b *testing.B) {
 				}, nil
 			})
 
-			cbMiddleware, _ := circuit_breaker.NewCircuitBreakerMiddlewareWithRedis(tc.config, nil)
+			cbMiddleware, _ := circuitbreaker.NewCircuitBreakerMiddlewareWithRedis(tc.config, nil)
 			cbHandler := cbMiddleware(handler)
 
 			req := &transport.Request{
@@ -161,7 +161,7 @@ func BenchmarkCircuitBreakerBuildKey(b *testing.B) {
 
 	for _, tc := range testCases {
 		b.Run(tc.name, func(b *testing.B) {
-			config := circuit_breaker.CircuitBreakerConfig{
+			config := circuitbreaker.Config{
 				FailureThreshold: 5,
 				SuccessThreshold: 2,
 				HalfOpenProbes:   3,
@@ -174,7 +174,7 @@ func BenchmarkCircuitBreakerBuildKey(b *testing.B) {
 				}, nil
 			})
 
-			cbMiddleware, _ := circuit_breaker.NewCircuitBreakerMiddlewareWithRedis(config, nil)
+			cbMiddleware, _ := circuitbreaker.NewCircuitBreakerMiddlewareWithRedis(config, nil)
 			cbHandler := cbMiddleware(handler)
 
 			req := &transport.Request{
@@ -266,7 +266,7 @@ func BenchmarkShardedBreakers(b *testing.B) {
 		b.Run(level.name, func(b *testing.B) {
 			ctx := context.Background()
 
-			config := circuit_breaker.CircuitBreakerConfig{
+			config := circuitbreaker.Config{
 				FailureThreshold: 5,
 				SuccessThreshold: 2,
 				HalfOpenProbes:   3,
@@ -280,7 +280,7 @@ func BenchmarkShardedBreakers(b *testing.B) {
 				}, nil
 			})
 
-			cbMiddleware, _ := circuit_breaker.NewCircuitBreakerMiddlewareWithRedis(config, nil)
+			cbMiddleware, _ := circuitbreaker.NewCircuitBreakerMiddlewareWithRedis(config, nil)
 			cbHandler := cbMiddleware(handler)
 
 			// Pre-generate keys
@@ -351,7 +351,7 @@ func BenchmarkStateTransitions(b *testing.B) {
 		b.Run(trans.name, func(b *testing.B) {
 			ctx := context.Background()
 
-			config := circuit_breaker.CircuitBreakerConfig{
+			config := circuitbreaker.Config{
 				FailureThreshold: 2,
 				SuccessThreshold: 2,
 				HalfOpenProbes:   5,
@@ -378,7 +378,7 @@ func BenchmarkStateTransitions(b *testing.B) {
 
 // runStateTransition is a helper function that simulates a state transition
 // for a circuit breaker.
-func runStateTransition(ctx context.Context, config circuit_breaker.CircuitBreakerConfig, from, to string) {
+func runStateTransition(ctx context.Context, config circuitbreaker.Config, _ string, to string) {
 	var shouldFail atomic.Bool
 
 	handler := transport.HandlerFunc(func(_ context.Context, _ *transport.Request) (*transport.Response, error) {
@@ -395,7 +395,7 @@ func runStateTransition(ctx context.Context, config circuit_breaker.CircuitBreak
 		}, nil
 	})
 
-	cbMiddleware, _ := circuit_breaker.NewCircuitBreakerMiddlewareWithRedis(config, nil)
+	cbMiddleware, _ := circuitbreaker.NewCircuitBreakerMiddlewareWithRedis(config, nil)
 	cbHandler := cbMiddleware(handler)
 
 	req := &transport.Request{
@@ -460,7 +460,7 @@ func BenchmarkCircuitBreakerWithAdaptiveThresholds(b *testing.B) {
 		b.Run(tc.name, func(b *testing.B) {
 			ctx := context.Background()
 
-			config := circuit_breaker.CircuitBreakerConfig{
+			config := circuitbreaker.Config{
 				FailureThreshold:   10,
 				SuccessThreshold:   5,
 				HalfOpenProbes:     5,
@@ -485,7 +485,7 @@ func BenchmarkCircuitBreakerWithAdaptiveThresholds(b *testing.B) {
 				}, nil
 			})
 
-			cbMiddleware, _ := circuit_breaker.NewCircuitBreakerMiddlewareWithRedis(config, nil)
+			cbMiddleware, _ := circuitbreaker.NewCircuitBreakerMiddlewareWithRedis(config, nil)
 			cbHandler := cbMiddleware(handler)
 
 			req := &transport.Request{
@@ -535,7 +535,7 @@ func BenchmarkCircuitBreakerMemoryAllocation(b *testing.B) {
 		b.Run(scenario.name, func(b *testing.B) {
 			ctx := context.Background()
 
-			config := circuit_breaker.CircuitBreakerConfig{
+			config := circuitbreaker.Config{
 				FailureThreshold: 5,
 				SuccessThreshold: 2,
 				HalfOpenProbes:   3,
@@ -548,7 +548,7 @@ func BenchmarkCircuitBreakerMemoryAllocation(b *testing.B) {
 				}, nil
 			})
 
-			cbMiddleware, _ := circuit_breaker.NewCircuitBreakerMiddlewareWithRedis(config, nil)
+			cbMiddleware, _ := circuitbreaker.NewCircuitBreakerMiddlewareWithRedis(config, nil)
 			cbHandler := cbMiddleware(handler)
 
 			req := &transport.Request{
@@ -585,7 +585,7 @@ func BenchmarkCircuitBreakerHighConcurrency(b *testing.B) {
 		b.Run(fmt.Sprintf("concurrency_%d", level), func(b *testing.B) {
 			ctx := context.Background()
 
-			config := circuit_breaker.CircuitBreakerConfig{
+			config := circuitbreaker.Config{
 				FailureThreshold:   20,
 				SuccessThreshold:   10,
 				HalfOpenProbes:     20,
@@ -610,7 +610,7 @@ func BenchmarkCircuitBreakerHighConcurrency(b *testing.B) {
 				}, nil
 			})
 
-			cbMiddleware, _ := circuit_breaker.NewCircuitBreakerMiddlewareWithRedis(config, nil)
+			cbMiddleware, _ := circuitbreaker.NewCircuitBreakerMiddlewareWithRedis(config, nil)
 			cbHandler := cbMiddleware(handler)
 
 			// Pre-generate requests
@@ -708,7 +708,7 @@ func BenchmarkStringBuilder(b *testing.B) {
 func BenchmarkCircuitBreakerProbeCleanup(b *testing.B) {
 	ctx := context.Background()
 
-	config := circuit_breaker.CircuitBreakerConfig{
+	config := circuitbreaker.Config{
 		FailureThreshold: 1,
 		SuccessThreshold: 100, // Keep in half-open
 		HalfOpenProbes:   10,
@@ -716,7 +716,7 @@ func BenchmarkCircuitBreakerProbeCleanup(b *testing.B) {
 	}
 
 	// Setup circuit in half-open state
-	cbMiddleware, _ := circuit_breaker.NewCircuitBreakerMiddlewareWithRedis(config, nil)
+	cbMiddleware, _ := circuitbreaker.NewCircuitBreakerMiddlewareWithRedis(config, nil)
 
 	// Open circuit first
 	failHandler := transport.HandlerFunc(func(_ context.Context, _ *transport.Request) (*transport.Response, error) {

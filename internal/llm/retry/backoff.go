@@ -39,7 +39,7 @@ func (r *retryMiddleware) calculateBackoff(attempt int, err error) time.Duration
 	if r.config.UseJitter {
 		// Full jitter: random between 0 and calculated backoff.
 		// Using math/rand/v2 for thread-safe random generation.
-		jitterMs := rand.Int64N(baseBackoff.Milliseconds() + 1)
+		jitterMs := rand.Int64N(baseBackoff.Milliseconds() + 1) // #nosec G404 -- non-cryptographic jitter is appropriate here
 		exponentialBackoff = time.Duration(jitterMs) * time.Millisecond
 	}
 
@@ -71,7 +71,7 @@ func (r *retryMiddleware) calculatePureExponentialBackoff(attempt int) time.Dura
 	if r.config.UseJitter {
 		// Full jitter: random between 0 and calculated backoff.
 		// Using math/rand/v2 for thread-safe random generation.
-		jitterMs := rand.Int64N(baseBackoff.Milliseconds() + 1)
+		jitterMs := rand.Int64N(baseBackoff.Milliseconds() + 1) // #nosec G404 -- non-cryptographic jitter is appropriate here
 		return time.Duration(jitterMs) * time.Millisecond
 	}
 
@@ -83,8 +83,8 @@ func (r *retryMiddleware) calculatePureExponentialBackoff(attempt int) time.Dura
 // supporting multiple retry-after formats including RFC date strings
 // and numeric second values with comprehensive fallback parsing.
 func (r *retryMiddleware) extractRetryAfter(err error) time.Duration {
-	// Check for RetryAfterProvider interface first.
-	var provider RetryAfterProvider
+	// Check for AfterProvider interface first.
+	var provider AfterProvider
 	if errors.As(err, &provider) {
 		return provider.GetRetryAfter()
 	}
@@ -177,7 +177,7 @@ func ExponentialBackoff(attempt int, config configuration.RetryConfig) time.Dura
 
 	if config.UseJitter {
 		// Full jitter using thread-safe rand/v2.
-		jitterMs := rand.Int64N(backoff.Milliseconds() + 1)
+		jitterMs := rand.Int64N(backoff.Milliseconds() + 1) // #nosec G404 -- non-cryptographic jitter is appropriate here
 		return time.Duration(jitterMs) * time.Millisecond
 	}
 
@@ -195,7 +195,7 @@ func CalculateJitter(base time.Duration, factor float64) time.Duration {
 	}
 
 	jitterRange := float64(base) * factor
-	jitter := rand.Float64() * jitterRange
+	jitter := rand.Float64() * jitterRange // #nosec G404 -- non-cryptographic jitter is appropriate here
 
 	return base + time.Duration(jitter)
 }

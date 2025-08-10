@@ -1,6 +1,6 @@
-// Package resilience provides internal tests for adaptive threshold functionality.
+// Package circuit_breaker provides internal tests for adaptive threshold functionality.
 // These tests require access to unexported types and functions.
-package circuit_breaker
+package circuitbreaker
 
 import (
 	"runtime"

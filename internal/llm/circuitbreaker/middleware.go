@@ -1,4 +1,4 @@
-package circuit_breaker
+package circuitbreaker
 
 import (
 	"context"
@@ -21,10 +21,10 @@ const (
 	defaultProbeTimeoutSeconds = 60
 )
 
-// CircuitBreakerConfig controls the behavior of a circuit breaker.
+// Config controls the behavior of a circuit breaker.
 // It defines failure thresholds, success requirements, and timing parameters
 // for automatic failure detection and recovery.
-type CircuitBreakerConfig struct {
+type Config struct {
 	// FailureThreshold is the number of consecutive failures required to open the circuit.
 	FailureThreshold int `json:"failure_threshold"`
 	// SuccessThreshold is the number of consecutive successes required to close the circuit.
@@ -49,7 +49,7 @@ type CircuitBreakerConfig struct {
 // It coordinates with Redis for distributed probe synchronization to prevent thundering herd effects.
 type circuitBreakerMiddleware struct {
 	breakers          *shardedBreakers
-	config            CircuitBreakerConfig
+	config            Config
 	redisClient       *redis.Client
 	probeGuardEnabled bool
 	logger            *slog.Logger
@@ -59,7 +59,7 @@ type circuitBreakerMiddleware struct {
 // It implements per-provider circuit breaking with coordinated probe testing
 // to prevent a thundering herd during recovery.
 func NewCircuitBreakerMiddlewareWithRedis(
-	cfg CircuitBreakerConfig,
+	cfg Config,
 	client *redis.Client,
 ) (transport.Middleware, error) {
 	cbm := &circuitBreakerMiddleware{
@@ -234,8 +234,8 @@ func (c *circuitBreakerMiddleware) GetMetrics(
 
 // GetStats returns comprehensive statistics for all circuit breakers.
 // It aggregates metrics across all breakers to provide system-wide visibility.
-func (c *circuitBreakerMiddleware) GetStats() (*CircuitBreakerStats, error) {
-	stats := &CircuitBreakerStats{
+func (c *circuitBreakerMiddleware) GetStats() (*Stats, error) {
+	stats := &Stats{
 		StateCount: make(map[string]int),
 	}
 

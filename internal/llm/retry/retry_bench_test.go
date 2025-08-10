@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/ahrav/go-judgy/internal/domain"
-	"github.com/ahrav/go-judgy/internal/llm/circuit_breaker"
+	"github.com/ahrav/go-judgy/internal/llm/circuitbreaker"
 	"github.com/ahrav/go-judgy/internal/llm/configuration"
 	llmerrors "github.com/ahrav/go-judgy/internal/llm/errors"
 	"github.com/ahrav/go-judgy/internal/llm/retry"
@@ -519,17 +519,17 @@ func BenchmarkCircuitBreakerIntegration(b *testing.B) {
 	scenarios := []struct {
 		name           string
 		failurePattern int // Every Nth request fails
-		circuitConfig  circuit_breaker.CircuitBreakerConfig
+		circuitConfig  circuitbreaker.Config
 	}{
 		{
 			name:           "NoCircuitBreaker",
 			failurePattern: 3,
-			circuitConfig:  circuit_breaker.CircuitBreakerConfig{}, // Default/disabled
+			circuitConfig:  circuitbreaker.Config{}, // Default/disabled
 		},
 		{
 			name:           "StrictCircuitBreaker",
 			failurePattern: 2,
-			circuitConfig: circuit_breaker.CircuitBreakerConfig{
+			circuitConfig: circuitbreaker.Config{
 				FailureThreshold: 1,
 				SuccessThreshold: 1,
 				HalfOpenProbes:   1,
@@ -539,7 +539,7 @@ func BenchmarkCircuitBreakerIntegration(b *testing.B) {
 		{
 			name:           "RelaxedCircuitBreaker",
 			failurePattern: 5,
-			circuitConfig: circuit_breaker.CircuitBreakerConfig{
+			circuitConfig: circuitbreaker.Config{
 				FailureThreshold: 5,
 				SuccessThreshold: 3,
 				HalfOpenProbes:   2,
@@ -585,7 +585,7 @@ func BenchmarkCircuitBreakerIntegration(b *testing.B) {
 			var wrappedHandler transport.Handler
 
 			if scenario.circuitConfig.FailureThreshold > 0 {
-				circuitBreakerMiddleware, err := circuit_breaker.NewCircuitBreakerMiddlewareWithRedis(scenario.circuitConfig, nil)
+				circuitBreakerMiddleware, err := circuitbreaker.NewCircuitBreakerMiddlewareWithRedis(scenario.circuitConfig, nil)
 				if err != nil {
 					b.Fatal(err)
 				}
@@ -782,7 +782,7 @@ func BenchmarkLargePayload(b *testing.B) {
 			largeQuestion := strings.Repeat("word ", payload.questionSize/5)
 			largeResponse := strings.Repeat("response ", payload.responseSize/9)
 
-			handler := transport.HandlerFunc(func(_ context.Context, req *transport.Request) (*transport.Response, error) {
+			handler := transport.HandlerFunc(func(_ context.Context, _ *transport.Request) (*transport.Response, error) {
 				// Succeed immediately to focus on payload handling overhead
 				return &transport.Response{
 					Content:      largeResponse,

@@ -42,11 +42,11 @@ type retryMiddleware struct {
 	stats  *retryStats
 }
 
-// RetryAfterProvider defines an interface for error types that can provide
+// AfterProvider defines an interface for error types that can provide
 // a specific duration to wait before retrying.
 // This allows servers to communicate backpressure and rate limits, which the
 // client can respect.
-type RetryAfterProvider interface {
+type AfterProvider interface {
 	// GetRetryAfter returns the recommended duration to wait before the next attempt.
 	// If no specific duration is available, it should return zero.
 	GetRetryAfter() time.Duration
@@ -195,32 +195,12 @@ func (r *retryMiddleware) middleware() transport.Middleware {
 				r.recordBackoffMetrics(backoff)
 
 				// Ensure backoff doesn't push us past the overall timeout.
-				if r.config.MaxElapsedTime > 0 {
-					elapsed := time.Since(startTime)
-					if elapsed+backoff > r.config.MaxElapsedTime {
-						// Provider retry-after may exceed our time budget - use exponential as fallback.
-						retryAfter := r.extractRetryAfter(err)
-						if retryAfter > 0 {
-							// Calculate exponential backoff ignoring provider guidance.
-							exponentialBackoff := r.calculatePureExponentialBackoff(attempt)
-							if elapsed+exponentialBackoff <= r.config.MaxElapsedTime {
-								backoff = exponentialBackoff
-							} else {
-								r.logger.Warn("max elapsed time exceeded",
-									"elapsed", elapsed,
-									"attempts", attempt,
-									"last_error", err)
-								break
-							}
-						} else {
-							r.logger.Warn("max elapsed time exceeded",
-								"elapsed", elapsed,
-								"attempts", attempt,
-								"last_error", err)
-							break
-						}
-					}
+				elapsed := time.Since(startTime)
+				adjustedBackoff, shouldContinue := r.validateBackoffWithTimeout(backoff, elapsed, attempt, err)
+				if !shouldContinue {
+					break
 				}
+				backoff = adjustedBackoff
 
 				r.logger.Debug("retrying after backoff",
 					"attempt", attempt,
@@ -259,7 +239,7 @@ func (r *retryMiddleware) isRetryable(err error) bool {
 		return false
 	}
 
-	// Check specific error types BEFORE checking RetryAfterProvider interface
+	// Check specific error types BEFORE checking AfterProvider interface
 	// to ensure proper error classification takes precedence.
 
 	var circuitBreakerErr *llmerrors.CircuitBreakerError
@@ -290,8 +270,8 @@ func (r *retryMiddleware) isRetryable(err error) bool {
 		return true
 	}
 
-	// Check for RetryAfterProvider interface last to handle custom error types.
-	var provider RetryAfterProvider
+	// Check for AfterProvider interface last to handle custom error types.
+	var provider AfterProvider
 	if errors.As(err, &provider) {
 		return true
 	}
@@ -354,4 +334,38 @@ func getNetworkErrorIndicators() []string {
 		"i/o timeout",
 		"eof",
 	}
+}
+
+// validateBackoffWithTimeout checks if backoff duration is within elapsed time limits.
+// Returns adjusted backoff duration or signals timeout exceeded via boolean.
+func (r *retryMiddleware) validateBackoffWithTimeout(
+	backoff time.Duration,
+	elapsed time.Duration,
+	attempt int,
+	err error,
+) (time.Duration, bool) {
+	if r.config.MaxElapsedTime <= 0 {
+		return backoff, true // No timeout constraint
+	}
+
+	if elapsed+backoff <= r.config.MaxElapsedTime {
+		return backoff, true // Within time budget
+	}
+
+	// Provider retry-after may exceed our time budget - use exponential as fallback.
+	retryAfter := r.extractRetryAfter(err)
+	if retryAfter > 0 {
+		// Calculate exponential backoff ignoring provider guidance.
+		exponentialBackoff := r.calculatePureExponentialBackoff(attempt)
+		if elapsed+exponentialBackoff <= r.config.MaxElapsedTime {
+			return exponentialBackoff, true
+		}
+	}
+
+	// Time budget exceeded
+	r.logger.Warn("max elapsed time exceeded",
+		"elapsed", elapsed,
+		"attempts", attempt,
+		"last_error", err)
+	return 0, false
 }

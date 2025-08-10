@@ -1,6 +1,6 @@
-// Package circuit_breaker Package resilience provides mechanisms to build robust and fault-tolerant LLM client applications.
-// It includes implementations for retry, circuit breaking, rate limiting, and caching.
-package circuit_breaker
+// Package circuitbreaker provides mechanisms to build robust and fault-tolerant LLM client applications.
+// It includes implementations for circuit breaking to prevent cascading failures.
+package circuitbreaker
 
 import (
 	"errors"
@@ -111,7 +111,7 @@ func (cb *circuitBreaker) getJitter() time.Duration {
 }
 
 // newCircuitBreaker creates a new circuit breaker instance.
-func newCircuitBreaker(cfg CircuitBreakerConfig) *circuitBreaker {
+func newCircuitBreaker(cfg Config) *circuitBreaker {
 	cb := &circuitBreaker{
 		failureThreshold:  cfg.FailureThreshold,
 		successThreshold:  cfg.SuccessThreshold,

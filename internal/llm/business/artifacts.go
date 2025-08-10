@@ -1,3 +1,4 @@
+// Package business provides business logic components for artifact storage and management.
 package business
 
 import (

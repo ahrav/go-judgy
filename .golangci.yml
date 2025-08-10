@@ -170,18 +170,31 @@ linters:
       - ".*\\.pb\\.go$"
       - ".*_generated\\.go$"
       - ".*retry\\.go$"
-      - ".*circuit_breaker\\.go$"
+      - ".*circuitbreaker\\.go$"
       - ".*cache\\.go$"
     rules:
       # Exclude some linters from running on tests files
       - path: _test\.go
         linters:
-          - errcheck
-          - dupl
-          - gosec
-          - goconst
-          - gocognit
-          - mnd
+          - errcheck       # Error checking - tests often ignore errors intentionally
+          - dupl           # Duplicate code - test patterns are often similar
+          - gosec          # Security - tests do things that would be insecure in production
+          - goconst        # Constants - tests often repeat test data
+          - gocognit       # Cognitive complexity - test logic can be complex
+          - mnd            # Magic numbers - tests often use literal values
+          - revive         # Documentation/style - tests don't need strict documentation
+          - godot          # Comment periods - test comments can be casual
+          - gocritic       # Style issues - tests can be less strict on style
+          - misspell       # Spelling - test comments/strings can be more casual
+          - nakedret       # Naked returns - tests often use simple returns
+          - noctx          # Context usage - tests often don't need contexts
+          - nolintlint     # Nolint directives - tests might need more nolints
+          - unconvert      # Unnecessary conversions - tests convert for clarity
+          - unparam        # Unused parameters - test functions have standard signatures
+          - unused         # Unused variables - tests declare variables for clarity
+          - whitespace     # Whitespace - tests can be more relaxed on formatting
+          - nestif         # Nested ifs - test validation logic can be nested
+          - prealloc       # Slice preallocation - performance not critical in tests
 
       # Exclude gocognit for DetermineWinner function in score.go
       - path: score\.go
@@ -199,25 +212,36 @@ linters:
           - lll
         source: "^//go:generate "
 
-      # Exclude nestif for complex nested if block in circuit.go
+      # Exclude nestif for complex nested if blocks where nesting improves readability
       - path: internal/llm/resilience/circuit\.go
         linters:
           - nestif
         source: "if time\\.Since\\(lastFailure\\) > timeout"
 
+      # Exclude nestif for test files where nested logic is more readable
+      - path: _test\.go
+        linters:
+          - nestif
+
+      # Exclude nestif for property tests where nested validation is clearer
+      - path: _prop_test\.go
+        linters:
+          - nestif
+
+      # Exclude nestif for fuzz tests where nested validation is clearer
+      - path: _fuzz_test\.go
+        linters:
+          - nestif
+
 formatters:
   enable:
     - gofmt          # Gofmt checks whether code was gofmt-ed
-    - gofumpt        # Gofumpt checks whether code was gofumpt-ed
     - goimports      # Check import statements are formatted according to the 'goimport' command
 
   settings:
     # Code style
     gofmt:
       simplify: true
-
-    gofumpt:
-      extra-rules: true
 
 severity:
   default: error

@@ -472,7 +472,7 @@ func TestRateLimitMiddleware_ConcurrentMiddlewareExecution(t *testing.T) {
 
 	// Mock handler that simulates some work
 	handlerCallCount := int64(0)
-	mockHandler := transport.HandlerFunc(func(_ context.Context, req *transport.Request) (*transport.Response, error) {
+	mockHandler := transport.HandlerFunc(func(_ context.Context, _ *transport.Request) (*transport.Response, error) {
 		atomic.AddInt64(&handlerCallCount, 1)
 		time.Sleep(time.Microsecond) // Simulate small amount of work
 		return &transport.Response{}, nil

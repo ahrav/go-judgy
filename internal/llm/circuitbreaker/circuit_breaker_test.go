@@ -1,4 +1,4 @@
-package circuit_breaker_test
+package circuitbreaker_test
 
 import (
 	"context"
@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/ahrav/go-judgy/internal/domain"
-	"github.com/ahrav/go-judgy/internal/llm/circuit_breaker"
+	"github.com/ahrav/go-judgy/internal/llm/circuitbreaker"
 	"github.com/ahrav/go-judgy/internal/llm/configuration"
 	llmerrors "github.com/ahrav/go-judgy/internal/llm/errors"
 	"github.com/ahrav/go-judgy/internal/llm/retry"
@@ -25,7 +25,7 @@ import (
 func TestCircuitBreaker_ProbeCounterManagement(t *testing.T) {
 	ctx := context.Background()
 
-	config := circuit_breaker.CircuitBreakerConfig{
+	config := circuitbreaker.Config{
 		FailureThreshold: 2,
 		SuccessThreshold: 2,
 		HalfOpenProbes:   3,
@@ -49,7 +49,7 @@ func TestCircuitBreaker_ProbeCounterManagement(t *testing.T) {
 		}
 	})
 
-	cbMiddleware, _ := circuit_breaker.NewCircuitBreakerMiddlewareWithRedis(config, nil)
+	cbMiddleware, _ := circuitbreaker.NewCircuitBreakerMiddlewareWithRedis(config, nil)
 	failingCBHandler := cbMiddleware(failingHandler)
 
 	// Trigger failures to open circuit
@@ -117,7 +117,7 @@ func TestCircuitBreaker_ProbeCounterManagement(t *testing.T) {
 func TestCircuitBreaker_StateMachineTimeConversion(t *testing.T) {
 	ctx := context.Background()
 
-	config := circuit_breaker.CircuitBreakerConfig{
+	config := circuitbreaker.Config{
 		FailureThreshold: 1,
 		SuccessThreshold: 1,
 		HalfOpenProbes:   1,
@@ -133,7 +133,7 @@ func TestCircuitBreaker_StateMachineTimeConversion(t *testing.T) {
 		}
 	})
 
-	cbMiddleware, _ := circuit_breaker.NewCircuitBreakerMiddlewareWithRedis(config, nil)
+	cbMiddleware, _ := circuitbreaker.NewCircuitBreakerMiddlewareWithRedis(config, nil)
 	cbHandler := cbMiddleware(failureHandler)
 
 	req := &transport.Request{
@@ -206,7 +206,7 @@ func TestCircuitBreaker_StateMachineTimeConversion(t *testing.T) {
 func TestCircuitBreaker_RetryInteraction(t *testing.T) {
 	ctx := context.Background()
 
-	cbConfig := circuit_breaker.CircuitBreakerConfig{
+	cbConfig := circuitbreaker.Config{
 		FailureThreshold: 1,
 		SuccessThreshold: 1,
 		HalfOpenProbes:   1,
@@ -235,7 +235,7 @@ func TestCircuitBreaker_RetryInteraction(t *testing.T) {
 	// Build middleware stack: CB → Retry → Handler
 	retryMiddleware, _ := retry.NewRetryMiddlewareWithConfig(retryConfig)
 	retryHandler := retryMiddleware(handler)
-	cbMiddleware, _ := circuit_breaker.NewCircuitBreakerMiddlewareWithRedis(cbConfig, nil)
+	cbMiddleware, _ := circuitbreaker.NewCircuitBreakerMiddlewareWithRedis(cbConfig, nil)
 	finalHandler := cbMiddleware(retryHandler)
 
 	req := &transport.Request{
@@ -287,7 +287,7 @@ func TestCircuitBreaker_RetryInteraction(t *testing.T) {
 func TestCircuitBreaker_ErrorTyping(t *testing.T) {
 	ctx := context.Background()
 
-	config := circuit_breaker.CircuitBreakerConfig{
+	config := circuitbreaker.Config{
 		FailureThreshold: 1,
 		SuccessThreshold: 3, // Higher than HalfOpenProbes to test limit
 		HalfOpenProbes:   1,
@@ -314,7 +314,7 @@ func TestCircuitBreaker_ErrorTyping(t *testing.T) {
 		}, nil
 	})
 
-	cbMiddleware, _ := circuit_breaker.NewCircuitBreakerMiddlewareWithRedis(config, nil)
+	cbMiddleware, _ := circuitbreaker.NewCircuitBreakerMiddlewareWithRedis(config, nil)
 	failingCBHandler := cbMiddleware(failureHandler)
 	slowCBHandler := cbMiddleware(slowHandler)
 
@@ -398,7 +398,7 @@ func TestCircuitBreaker_ErrorTyping(t *testing.T) {
 func TestCircuitBreaker_KeyGranularity(t *testing.T) {
 	ctx := context.Background()
 
-	config := circuit_breaker.CircuitBreakerConfig{
+	config := circuitbreaker.Config{
 		FailureThreshold: 1,
 		SuccessThreshold: 1,
 		HalfOpenProbes:   1,
@@ -414,7 +414,7 @@ func TestCircuitBreaker_KeyGranularity(t *testing.T) {
 		}
 	})
 
-	cbMiddleware, _ := circuit_breaker.NewCircuitBreakerMiddlewareWithRedis(config, nil)
+	cbMiddleware, _ := circuitbreaker.NewCircuitBreakerMiddlewareWithRedis(config, nil)
 	cbHandler := cbMiddleware(handler)
 
 	// Request without region
@@ -473,7 +473,7 @@ func TestCircuitBreaker_KeyGranularity(t *testing.T) {
 func TestCircuitBreaker_StateTransitionWithoutRecursion(t *testing.T) {
 	ctx := context.Background()
 
-	config := circuit_breaker.CircuitBreakerConfig{
+	config := circuitbreaker.Config{
 		FailureThreshold: 1,
 		SuccessThreshold: 1,
 		HalfOpenProbes:   1,
@@ -497,7 +497,7 @@ func TestCircuitBreaker_StateTransitionWithoutRecursion(t *testing.T) {
 		}, nil
 	})
 
-	cbMiddleware, _ := circuit_breaker.NewCircuitBreakerMiddlewareWithRedis(config, nil)
+	cbMiddleware, _ := circuitbreaker.NewCircuitBreakerMiddlewareWithRedis(config, nil)
 	cbHandler := cbMiddleware(handler)
 
 	req := &transport.Request{
@@ -562,7 +562,7 @@ func TestCircuitBreaker_StateTransitionWithoutRecursion(t *testing.T) {
 func TestCircuitBreaker_ComprehensiveFlow(t *testing.T) {
 	ctx := context.Background()
 
-	config := circuit_breaker.CircuitBreakerConfig{
+	config := circuitbreaker.Config{
 		FailureThreshold: 2,
 		SuccessThreshold: 2,
 		HalfOpenProbes:   2,
@@ -589,7 +589,7 @@ func TestCircuitBreaker_ComprehensiveFlow(t *testing.T) {
 		}, nil
 	})
 
-	cbMiddleware, _ := circuit_breaker.NewCircuitBreakerMiddlewareWithRedis(config, nil)
+	cbMiddleware, _ := circuitbreaker.NewCircuitBreakerMiddlewareWithRedis(config, nil)
 	cbHandler := cbMiddleware(handler)
 
 	req := &transport.Request{
@@ -680,7 +680,7 @@ func TestCircuitBreaker_ComprehensiveFlow(t *testing.T) {
 func TestCircuitBreaker_ConcurrentProbeRaceConditionFix(t *testing.T) {
 	ctx := context.Background()
 
-	config := circuit_breaker.CircuitBreakerConfig{
+	config := circuitbreaker.Config{
 		FailureThreshold: 1,
 		SuccessThreshold: 1,
 		HalfOpenProbes:   3, // Allow 3 probes max
@@ -704,7 +704,7 @@ func TestCircuitBreaker_ConcurrentProbeRaceConditionFix(t *testing.T) {
 		}
 	})
 
-	cbMiddleware, _ := circuit_breaker.NewCircuitBreakerMiddlewareWithRedis(config, nil)
+	cbMiddleware, _ := circuitbreaker.NewCircuitBreakerMiddlewareWithRedis(config, nil)
 	failingCBHandler := cbMiddleware(failingHandler)
 
 	// Open the circuit
@@ -843,7 +843,7 @@ func TestCircuitBreaker_AdaptiveThresholds(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			config := circuit_breaker.CircuitBreakerConfig{
+			config := circuitbreaker.Config{
 				FailureThreshold:   tt.baseThreshold,
 				SuccessThreshold:   1,
 				HalfOpenProbes:     1,
@@ -874,7 +874,7 @@ func TestCircuitBreaker_AdaptiveThresholds(t *testing.T) {
 				}, nil
 			})
 
-			cbMiddleware, _ := circuit_breaker.NewCircuitBreakerMiddlewareWithRedis(config, nil)
+			cbMiddleware, _ := circuitbreaker.NewCircuitBreakerMiddlewareWithRedis(config, nil)
 			cbHandler := cbMiddleware(handler)
 
 			req := &transport.Request{
@@ -910,7 +910,7 @@ func TestCircuitBreaker_AdaptiveThresholds(t *testing.T) {
 func TestCircuitBreaker_MetricsTracking(t *testing.T) {
 	ctx := context.Background()
 
-	config := circuit_breaker.CircuitBreakerConfig{
+	config := circuitbreaker.Config{
 		FailureThreshold: 2,
 		SuccessThreshold: 2,
 		HalfOpenProbes:   2,
@@ -934,7 +934,7 @@ func TestCircuitBreaker_MetricsTracking(t *testing.T) {
 		}, nil
 	})
 
-	cbMiddleware, _ := circuit_breaker.NewCircuitBreakerMiddlewareWithRedis(config, nil)
+	cbMiddleware, _ := circuitbreaker.NewCircuitBreakerMiddlewareWithRedis(config, nil)
 	cbHandler := cbMiddleware(handler)
 
 	req := &transport.Request{
@@ -1004,7 +1004,7 @@ func TestCircuitBreaker_MetricsTracking(t *testing.T) {
 func TestCircuitBreaker_ShardedBreakers(t *testing.T) {
 	ctx := context.Background()
 
-	config := circuit_breaker.CircuitBreakerConfig{
+	config := circuitbreaker.Config{
 		FailureThreshold: 1,
 		SuccessThreshold: 1,
 		HalfOpenProbes:   1,
@@ -1012,7 +1012,7 @@ func TestCircuitBreaker_ShardedBreakers(t *testing.T) {
 		MaxBreakers:      100, // Limit for testing
 	}
 
-	cbMiddleware, _ := circuit_breaker.NewCircuitBreakerMiddlewareWithRedis(config, nil)
+	cbMiddleware, _ := circuitbreaker.NewCircuitBreakerMiddlewareWithRedis(config, nil)
 
 	// Test different keys map to different shards
 	providers := []string{"openai", "anthropic", "google", "azure", "aws"}
@@ -1095,18 +1095,18 @@ func TestCircuitBreaker_EdgeCases(t *testing.T) {
 
 	tests := []struct {
 		name   string
-		config circuit_breaker.CircuitBreakerConfig
+		config circuitbreaker.Config
 		test   func(t *testing.T, cbHandler transport.Handler)
 	}{
 		{
 			name: "zero failure threshold",
-			config: circuit_breaker.CircuitBreakerConfig{
+			config: circuitbreaker.Config{
 				FailureThreshold: 0,
 				SuccessThreshold: 1,
 				HalfOpenProbes:   1,
 				OpenTimeout:      10 * time.Millisecond,
 			},
-			test: func(t *testing.T, cbHandler transport.Handler) {
+			test: func(_ *testing.T, cbHandler transport.Handler) {
 				// Should open immediately on any failure
 				req := &transport.Request{
 					Operation: transport.OpGeneration,
@@ -1122,13 +1122,13 @@ func TestCircuitBreaker_EdgeCases(t *testing.T) {
 		},
 		{
 			name: "zero success threshold",
-			config: circuit_breaker.CircuitBreakerConfig{
+			config: circuitbreaker.Config{
 				FailureThreshold: 1,
 				SuccessThreshold: 0,
 				HalfOpenProbes:   1,
 				OpenTimeout:      10 * time.Millisecond,
 			},
-			test: func(t *testing.T, cbHandler transport.Handler) {
+			test: func(_ *testing.T, cbHandler transport.Handler) {
 				// Should transition from half-open to closed immediately
 				req := &transport.Request{
 					Operation: transport.OpGeneration,
@@ -1142,13 +1142,13 @@ func TestCircuitBreaker_EdgeCases(t *testing.T) {
 		},
 		{
 			name: "zero half-open probes",
-			config: circuit_breaker.CircuitBreakerConfig{
+			config: circuitbreaker.Config{
 				FailureThreshold: 1,
 				SuccessThreshold: 1,
 				HalfOpenProbes:   0,
 				OpenTimeout:      10 * time.Millisecond,
 			},
-			test: func(t *testing.T, cbHandler transport.Handler) {
+			test: func(_ *testing.T, cbHandler transport.Handler) {
 				// Should reject all half-open attempts
 				req := &transport.Request{
 					Operation: transport.OpGeneration,
@@ -1169,13 +1169,13 @@ func TestCircuitBreaker_EdgeCases(t *testing.T) {
 		},
 		{
 			name: "zero timeout",
-			config: circuit_breaker.CircuitBreakerConfig{
+			config: circuitbreaker.Config{
 				FailureThreshold: 1,
 				SuccessThreshold: 1,
 				HalfOpenProbes:   1,
 				OpenTimeout:      0,
 			},
-			test: func(t *testing.T, cbHandler transport.Handler) {
+			test: func(_ *testing.T, cbHandler transport.Handler) {
 				// Info: Zero timeout causes divide by zero in getJitter
 				// This is a bug in the implementation that needs fixing
 				// For now, we'll skip this test
@@ -1208,7 +1208,7 @@ func TestCircuitBreaker_EdgeCases(t *testing.T) {
 				}
 			})
 
-			cbMiddleware, _ := circuit_breaker.NewCircuitBreakerMiddlewareWithRedis(tt.config, nil)
+			cbMiddleware, _ := circuitbreaker.NewCircuitBreakerMiddlewareWithRedis(tt.config, nil)
 			cbHandler := cbMiddleware(handler)
 
 			tt.test(t, cbHandler)
@@ -1220,10 +1220,10 @@ func TestCircuitBreaker_EdgeCases(t *testing.T) {
 // a data race when reading across shards while other goroutines are creating
 // new circuit breakers.
 // This test demonstrates the unlocked map iteration bug.
-func TestCircuitBreaker_TotalCountDataRace(t *testing.T) {
+func TestCircuitBreaker_TotalCountDataRace(_ *testing.T) {
 	ctx := context.Background()
 
-	config := circuit_breaker.CircuitBreakerConfig{
+	config := circuitbreaker.Config{
 		FailureThreshold: 1,
 		SuccessThreshold: 1,
 		HalfOpenProbes:   1,
@@ -1239,7 +1239,7 @@ func TestCircuitBreaker_TotalCountDataRace(t *testing.T) {
 		}, nil
 	})
 
-	cbMiddleware, _ := circuit_breaker.NewCircuitBreakerMiddlewareWithRedis(config, nil)
+	cbMiddleware, _ := circuitbreaker.NewCircuitBreakerMiddlewareWithRedis(config, nil)
 	cbHandler := cbMiddleware(handler)
 
 	// Channel to coordinate goroutines
@@ -1297,7 +1297,7 @@ func TestCircuitBreaker_TotalCountDataRace(t *testing.T) {
 func TestCircuitBreaker_ZeroTimeoutPanic(t *testing.T) {
 	ctx := context.Background()
 
-	config := circuit_breaker.CircuitBreakerConfig{
+	config := circuitbreaker.Config{
 		FailureThreshold: 1,
 		SuccessThreshold: 1,
 		HalfOpenProbes:   1,
@@ -1323,7 +1323,7 @@ func TestCircuitBreaker_ZeroTimeoutPanic(t *testing.T) {
 		}, nil
 	})
 
-	cbMiddleware, _ := circuit_breaker.NewCircuitBreakerMiddlewareWithRedis(config, nil)
+	cbMiddleware, _ := circuitbreaker.NewCircuitBreakerMiddlewareWithRedis(config, nil)
 	failingCBHandler := cbMiddleware(failureHandler)
 	successCBHandler := cbMiddleware(successHandler)
 
@@ -1379,7 +1379,7 @@ func TestCircuitBreaker_ZeroTimeoutPanic(t *testing.T) {
 func TestCircuitBreaker_OpenToHalfOpenMetricsMissing(t *testing.T) {
 	ctx := context.Background()
 
-	config := circuit_breaker.CircuitBreakerConfig{
+	config := circuitbreaker.Config{
 		FailureThreshold: 1,
 		SuccessThreshold: 1,
 		HalfOpenProbes:   1,
@@ -1402,7 +1402,7 @@ func TestCircuitBreaker_OpenToHalfOpenMetricsMissing(t *testing.T) {
 		}
 	})
 
-	cbMiddleware, _ := circuit_breaker.NewCircuitBreakerMiddlewareWithRedis(config, nil)
+	cbMiddleware, _ := circuitbreaker.NewCircuitBreakerMiddlewareWithRedis(config, nil)
 	cbHandler := cbMiddleware(originalHandler)
 
 	req := &transport.Request{
@@ -1468,7 +1468,7 @@ func TestCircuitBreaker_OpenToHalfOpenMetricsMissing(t *testing.T) {
 func TestCircuitBreaker_ErrorTypeInconsistency(t *testing.T) {
 	ctx := context.Background()
 
-	config := circuit_breaker.CircuitBreakerConfig{
+	config := circuitbreaker.Config{
 		FailureThreshold: 1,
 		SuccessThreshold: 3, // Higher than HalfOpenProbes to ensure we hit limit
 		HalfOpenProbes:   1,
@@ -1493,7 +1493,7 @@ func TestCircuitBreaker_ErrorTypeInconsistency(t *testing.T) {
 		}, nil
 	})
 
-	cbMiddleware, _ := circuit_breaker.NewCircuitBreakerMiddlewareWithRedis(config, nil)
+	cbMiddleware, _ := circuitbreaker.NewCircuitBreakerMiddlewareWithRedis(config, nil)
 	failingCBHandler := cbMiddleware(failureHandler)
 	successCBHandler := cbMiddleware(slowSuccessHandler)
 
@@ -1588,7 +1588,7 @@ func TestCircuitBreaker_ErrorTypeInconsistency(t *testing.T) {
 func TestCircuitBreaker_ProbeIdentificationRace(t *testing.T) {
 	ctx := context.Background()
 
-	config := circuit_breaker.CircuitBreakerConfig{
+	config := circuitbreaker.Config{
 		FailureThreshold: 1,
 		SuccessThreshold: 1, // This causes quick transition from half-open to closed
 		HalfOpenProbes:   3,
@@ -1614,7 +1614,7 @@ func TestCircuitBreaker_ProbeIdentificationRace(t *testing.T) {
 		}, nil
 	})
 
-	cbMiddleware, _ := circuit_breaker.NewCircuitBreakerMiddlewareWithRedis(config, nil)
+	cbMiddleware, _ := circuitbreaker.NewCircuitBreakerMiddlewareWithRedis(config, nil)
 	failingCBHandler := cbMiddleware(failureHandler)
 
 	req := &transport.Request{
@@ -1695,7 +1695,7 @@ func TestCircuitBreaker_ProbeIdentificationRace(t *testing.T) {
 // creating temporary breakers.
 func TestCircuitBreaker_MaxBreakersLimit(t *testing.T) {
 	ctx := context.Background()
-	config := circuit_breaker.CircuitBreakerConfig{
+	config := circuitbreaker.Config{
 		FailureThreshold: 1,
 		SuccessThreshold: 1,
 		HalfOpenProbes:   1,
@@ -1708,7 +1708,7 @@ func TestCircuitBreaker_MaxBreakersLimit(t *testing.T) {
 		return &transport.Response{Content: "success"}, nil
 	})
 
-	cbMiddleware, err := circuit_breaker.NewCircuitBreakerMiddlewareWithRedis(config, nil)
+	cbMiddleware, err := circuitbreaker.NewCircuitBreakerMiddlewareWithRedis(config, nil)
 	if err != nil {
 		t.Fatalf("failed to create middleware: %v", err)
 	}
@@ -1799,7 +1799,7 @@ func TestCircuitBreaker_MaxBreakersLimit(t *testing.T) {
 // It ensures thread safety and consistent error reporting under high concurrency.
 func TestCircuitBreaker_MaxBreakersLimitConcurrent(t *testing.T) {
 	ctx := context.Background()
-	config := circuit_breaker.CircuitBreakerConfig{
+	config := circuitbreaker.Config{
 		FailureThreshold: 1,
 		SuccessThreshold: 1,
 		HalfOpenProbes:   1,
@@ -1812,7 +1812,7 @@ func TestCircuitBreaker_MaxBreakersLimitConcurrent(t *testing.T) {
 		return &transport.Response{Content: "success"}, nil
 	})
 
-	cbMiddleware, err := circuit_breaker.NewCircuitBreakerMiddlewareWithRedis(config, nil)
+	cbMiddleware, err := circuitbreaker.NewCircuitBreakerMiddlewareWithRedis(config, nil)
 	if err != nil {
 		t.Fatalf("failed to create middleware: %v", err)
 	}
@@ -1972,7 +1972,7 @@ func TestCircuitBreaker_BuildKeyVariations(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			config := circuit_breaker.CircuitBreakerConfig{
+			config := circuitbreaker.Config{
 				FailureThreshold: 1,
 				SuccessThreshold: 1,
 				HalfOpenProbes:   1,
@@ -1988,7 +1988,7 @@ func TestCircuitBreaker_BuildKeyVariations(t *testing.T) {
 				}
 			})
 
-			cbMiddleware, _ := circuit_breaker.NewCircuitBreakerMiddlewareWithRedis(config, nil)
+			cbMiddleware, _ := circuitbreaker.NewCircuitBreakerMiddlewareWithRedis(config, nil)
 			cbHandler := cbMiddleware(handler)
 
 			// First request opens circuit for its key
@@ -2034,7 +2034,7 @@ func TestCircuitBreaker_BuildKeyVariations(t *testing.T) {
 
 func TestHalfOpenSlotsAreFreedOnSuccess(t *testing.T) {
 	ctx := context.Background()
-	cfg := circuit_breaker.CircuitBreakerConfig{
+	cfg := circuitbreaker.Config{
 		FailureThreshold: 1,
 		SuccessThreshold: 3, // > HalfOpenProbes
 		HalfOpenProbes:   1,
@@ -2047,7 +2047,7 @@ func TestHalfOpenSlotsAreFreedOnSuccess(t *testing.T) {
 			Provider: "test", StatusCode: 500, Message: "boom", Type: llmerrors.ErrorTypeProvider,
 		}
 	})
-	cb, _ := circuit_breaker.NewCircuitBreakerMiddlewareWithRedis(cfg, nil)
+	cb, _ := circuitbreaker.NewCircuitBreakerMiddlewareWithRedis(cfg, nil)
 	cbf := cb(fail)
 	req := &transport.Request{Operation: transport.OpGeneration, Provider: "p", Model: "m", Question: "q"}
 	_, _ = cbf.Handle(ctx, req) // open
@@ -2074,9 +2074,9 @@ func TestHalfOpenSlotsAreFreedOnSuccess(t *testing.T) {
 	}
 }
 
-func TestOpenTimeoutTinyDoesNotPanic(t *testing.T) {
+func TestOpenTimeoutTinyDoesNotPanic(_ *testing.T) {
 	ctx := context.Background()
-	cfg := circuit_breaker.CircuitBreakerConfig{
+	cfg := circuitbreaker.Config{
 		FailureThreshold: 1,
 		SuccessThreshold: 1,
 		HalfOpenProbes:   1,
@@ -2090,7 +2090,7 @@ func TestOpenTimeoutTinyDoesNotPanic(t *testing.T) {
 		return &transport.Response{Content: "ok"}, nil
 	})
 
-	cb, _ := circuit_breaker.NewCircuitBreakerMiddlewareWithRedis(cfg, nil)
+	cb, _ := circuitbreaker.NewCircuitBreakerMiddlewareWithRedis(cfg, nil)
 	req := &transport.Request{Operation: transport.OpGeneration, Provider: "p", Model: "m", Question: "q"}
 
 	_, _ = cb(fail).Handle(ctx, req) // open

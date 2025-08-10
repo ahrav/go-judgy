@@ -1,3 +1,4 @@
+// Package errors provides error classification and handling utilities for LLM operations.
 package errors
 
 import (
