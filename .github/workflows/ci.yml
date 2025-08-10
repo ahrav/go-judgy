@@ -97,7 +97,7 @@ jobs:
           GOEXPERIMENT: synctest
         run: |
           echo "Running race detection tests..."
-          go test -race -timeout 10m -tags='!integration' -run '^Test[^F]' ./...
+          go test -race -timeout 10m -tags='!integration' -run '^Test' ./...
 
   lint:
     name: Lint
