@@ -5,6 +5,7 @@ import (
 	sdkworker "go.temporal.io/sdk/worker"
 
 	"github.com/ahrav/go-judgy/internal/activity"
+	"github.com/ahrav/go-judgy/internal/domain"
 	"github.com/ahrav/go-judgy/internal/llm"
 	"github.com/ahrav/go-judgy/internal/workflow"
 )
@@ -14,7 +15,9 @@ import (
 // the worker. The registration is not thread-safe and should only be called once
 // during application startup.
 func RegisterAll(w sdkworker.Worker, llmClient llm.Client) {
-	activities := activity.NewActivities(llmClient)
+	artifactStore := InitializeArtifactStore()
+	eventSink := domain.NewNoOpEventSink() // Default no-op sink for worker registration
+	activities := activity.NewActivities(llmClient, artifactStore, eventSink)
 
 	w.RegisterWorkflow(workflow.EvaluationWorkflow)
 	w.RegisterActivity(activities.GenerateAnswers)

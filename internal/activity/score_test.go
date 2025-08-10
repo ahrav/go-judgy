@@ -10,6 +10,7 @@ import (
 	"go.temporal.io/sdk/temporal"
 
 	"github.com/ahrav/go-judgy/internal/domain"
+	"github.com/ahrav/go-judgy/internal/llm/business"
 )
 
 // TestScoreAnswers verifies that ScoreAnswers returns proper error handling
@@ -18,7 +19,7 @@ import (
 func TestScoreAnswers(t *testing.T) {
 	t.Run("returns not implemented error", func(t *testing.T) {
 		// Create activities with mock client that returns "not implemented" error.
-		activities := NewActivities(newMockLLMClient())
+		activities := NewActivities(newMockLLMClient(), business.NewInMemoryArtifactStore(), domain.NewNoOpEventSink())
 
 		ctx := context.Background()
 		input := createValidScoreAnswersInput()
@@ -40,7 +41,7 @@ func TestScoreAnswers(t *testing.T) {
 
 	t.Run("ignores context and input parameters", func(t *testing.T) {
 		// Create activities with mock client for parameter testing.
-		activities := NewActivities(newMockLLMClient())
+		activities := NewActivities(newMockLLMClient(), business.NewInMemoryArtifactStore(), domain.NewNoOpEventSink())
 
 		// Test that the stub function ignores its parameters as expected.
 		// This verifies the function signature is correct.
@@ -62,7 +63,7 @@ func TestScoreAnswers(t *testing.T) {
 
 	t.Run("error contains expected information", func(t *testing.T) {
 		// Create activities with mock client for error validation.
-		activities := NewActivities(newMockLLMClient())
+		activities := NewActivities(newMockLLMClient(), business.NewInMemoryArtifactStore(), domain.NewNoOpEventSink())
 
 		ctx := context.Background()
 		input := createValidScoreAnswersInput()
@@ -77,6 +78,43 @@ func TestScoreAnswers(t *testing.T) {
 		errMsg := err.Error()
 		assert.Contains(t, errMsg, "ScoreAnswers", "error message should contain function name")
 		assert.Contains(t, errMsg, "not implemented", "error message should indicate not implemented")
+	})
+
+	t.Run("input validation path", func(t *testing.T) {
+		// Create activities with mock client for input validation testing.
+		activities := NewActivities(newMockLLMClient(), business.NewInMemoryArtifactStore(), domain.NewNoOpEventSink())
+
+		ctx := context.Background()
+
+		// Test with empty input to trigger validation path
+		emptyInput := domain.ScoreAnswersInput{}
+		result, err := activities.ScoreAnswers(ctx, emptyInput)
+
+		// Should return validation error since validation runs first
+		require.Error(t, err, "should return validation error with invalid input")
+		assert.Nil(t, result, "should return nil result")
+
+		// Verify it's a validation error, not the not-implemented error
+		var appErr *temporal.ApplicationError
+		require.ErrorAs(t, err, &appErr, "error should be ApplicationError")
+		assert.Contains(t, appErr.Error(), "invalid input", "error should indicate validation failure")
+	})
+
+	t.Run("successful mock path", func(t *testing.T) {
+		// Test the mock client success path by configuring it differently
+		mockClient := newMockLLMClient()
+		mockClient.scoreReturnsError = false // Configure for success
+		activities := NewActivities(mockClient, business.NewInMemoryArtifactStore(), domain.NewNoOpEventSink())
+
+		ctx := context.Background()
+		input := createValidScoreAnswersInput()
+
+		result, err := activities.ScoreAnswers(ctx, input)
+
+		// Should succeed with the mock client configured for success
+		require.NoError(t, err, "should not return error when mock succeeds")
+		require.NotNil(t, result, "should return valid result")
+		assert.Len(t, result.Scores, 1, "should return expected number of scores")
 	})
 }
 

@@ -98,6 +98,18 @@ func (a *configArtifactStoreAdapter) Exists(ctx context.Context, ref domain.Arti
 	return true, nil
 }
 
+// Delete removes an artifact from the store using type assertion fallback.
+// It first attempts to use the underlying store's Delete method if available,
+// otherwise returns an error indicating deletion is not supported.
+func (a *configArtifactStoreAdapter) Delete(ctx context.Context, ref domain.ArtifactRef) error {
+	if deleteStore, ok := a.store.(interface {
+		Delete(context.Context, domain.ArtifactRef) error
+	}); ok {
+		return deleteStore.Delete(ctx, ref)
+	}
+	return fmt.Errorf("delete operation not supported by underlying store")
+}
+
 // businessScoreValidator adapts business validation functions to transport.ScoreValidator interface.
 // It provides JSON validation and repair capabilities for LLM scoring responses,
 // converting between business and transport layer score data structures.
@@ -143,6 +155,23 @@ func (r *routerAdapter) Pick(provider, model string) (transport.ProviderAdapter,
 	}
 
 	return &providerAdapterWrapper{adapter: providerAdapter}, nil
+}
+
+// businessValidatorAdapter implements transport.Validator by calling business validation functions.
+type businessValidatorAdapter struct{}
+
+func newBusinessValidatorAdapter() transport.Validator {
+	return &businessValidatorAdapter{}
+}
+
+// ValidateProviderResponse validates provider response using business logic.
+func (v *businessValidatorAdapter) ValidateProviderResponse(resp *transport.Response) error {
+	return business.ValidateProviderResponse(resp)
+}
+
+// ValidateGenerationResponse validates generation response using business logic.
+func (v *businessValidatorAdapter) ValidateGenerationResponse(content string) error {
+	return business.ValidateGenerationResponse(content)
 }
 
 // providerAdapterWrapper wraps providers.ProviderAdapter to implement transport.ProviderAdapter.
@@ -231,7 +260,7 @@ func NewClient(cfg *configuration.Config) (Client, error) {
 		}
 	}
 
-	coreHandler := transport.NewHTTPHandler(httpClient, newRouterAdapter(router), nil)
+	coreHandler := transport.NewHTTPHandler(httpClient, newRouterAdapter(router), newBusinessValidatorAdapter())
 
 	// Build attempt-level middleware stack (applied per retry attempt)
 	var attemptMiddlewares []transport.Middleware

@@ -30,6 +30,10 @@ type ArtifactStore interface {
 	// Exists checks artifact presence without content retrieval.
 	// Enables efficient existence validation for caching and workflow decisions.
 	Exists(ctx context.Context, ref domain.ArtifactRef) (bool, error)
+
+	// Delete removes stored artifact from storage.
+	// Enables cleanup of temporary artifacts on activity failure or completion.
+	Delete(ctx context.Context, ref domain.ArtifactRef) error
 }
 
 // InMemoryArtifactStore provides in-memory content storage for development.
@@ -105,4 +109,19 @@ func (s *InMemoryArtifactStore) Exists(_ context.Context, ref domain.ArtifactRef
 
 	_, exists := s.storage[ref.Key]
 	return exists, nil
+}
+
+// Delete removes artifact from memory storage.
+// Provides cleanup capability for temporary artifacts and error recovery.
+// Returns nil if artifact doesn't exist (idempotent operation).
+func (s *InMemoryArtifactStore) Delete(_ context.Context, ref domain.ArtifactRef) error {
+	if ref.Key == "" {
+		return ErrArtifactKeyEmpty
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	delete(s.storage, ref.Key)
+	return nil
 }
