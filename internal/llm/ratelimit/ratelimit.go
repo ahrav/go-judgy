@@ -112,6 +112,59 @@ type rateLimitMiddleware struct {
 	logger *slog.Logger
 }
 
+// validateRateLimitConfig performs comprehensive validation of rate limiting configuration.
+//
+// This function orchestrates validation of both local and global rate limiting
+// settings to prevent security vulnerabilities and ensure correct operation.
+func validateRateLimitConfig(cfg *configuration.RateLimitConfig) error {
+	if err := validateLocalRateLimitConfig(cfg.Local); err != nil {
+		return err
+	}
+
+	if err := validateGlobalRateLimitConfig(&cfg.Global); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// validateLocalRateLimitConfig validates the local rate limit configuration.
+//
+// This function ensures that local rate limiting parameters are non-negative
+// and enforce the business rule that BurstSize must be 0 when TokensPerSecond is 0.
+func validateLocalRateLimitConfig(cfg configuration.LocalRateLimitConfig) error {
+	if !cfg.Enabled {
+		return nil // Skip validation when local limiting is disabled
+	}
+
+	if cfg.TokensPerSecond < 0 {
+		return fmt.Errorf("invalid local rate limit: TokensPerSecond cannot be negative (got %f)", cfg.TokensPerSecond)
+	}
+	if cfg.BurstSize < 0 {
+		return fmt.Errorf("invalid local rate limit: BurstSize cannot be negative (got %d)", cfg.BurstSize)
+	}
+	if cfg.TokensPerSecond == 0 && cfg.BurstSize > 0 {
+		return fmt.Errorf("invalid local rate limit: BurstSize must be 0 when TokensPerSecond is 0")
+	}
+
+	return nil
+}
+
+// validateGlobalRateLimitConfig validates the global rate limit configuration.
+//
+// This function ensures that global rate limiting parameters are non-negative.
+func validateGlobalRateLimitConfig(cfg *configuration.GlobalRateLimitConfig) error {
+	if !cfg.Enabled {
+		return nil // Skip validation when global limiting is disabled
+	}
+
+	if cfg.RequestsPerSecond < 0 {
+		return fmt.Errorf("invalid global rate limit: RequestsPerSecond cannot be negative (got %d)", cfg.RequestsPerSecond)
+	}
+
+	return nil
+}
+
 // NewRateLimitMiddlewareWithRedis creates a transport.Middleware for rate limiting.
 //
 // It implements a dual-layer system with a local token-bucket limiter and an
@@ -135,22 +188,8 @@ func NewRateLimitMiddlewareWithRedis(
 	cfg *configuration.RateLimitConfig,
 	client *redis.Client,
 ) (transport.Middleware, error) {
-	// Validate configuration to prevent security vulnerabilities
-	if cfg.Local.Enabled {
-		if cfg.Local.TokensPerSecond < 0 {
-			return nil, fmt.Errorf("invalid local rate limit: TokensPerSecond cannot be negative (got %f)", cfg.Local.TokensPerSecond)
-		}
-		if cfg.Local.BurstSize < 0 {
-			return nil, fmt.Errorf("invalid local rate limit: BurstSize cannot be negative (got %d)", cfg.Local.BurstSize)
-		}
-		// Allow zero values which effectively disable rate limiting
-		if cfg.Local.TokensPerSecond == 0 && cfg.Local.BurstSize > 0 {
-			return nil, fmt.Errorf("invalid local rate limit: BurstSize must be 0 when TokensPerSecond is 0")
-		}
-	}
-
-	if cfg.Global.Enabled && cfg.Global.RequestsPerSecond < 0 {
-		return nil, fmt.Errorf("invalid global rate limit: RequestsPerSecond cannot be negative (got %d)", cfg.Global.RequestsPerSecond)
+	if err := validateRateLimitConfig(cfg); err != nil {
+		return nil, err
 	}
 
 	// Pre-calculate the minimum TTL for local limiters based on refill time.
@@ -394,19 +433,19 @@ func (r *rateLimitMiddleware) checkGlobalLimit(ctx context.Context, key string) 
 		return fmt.Errorf("invalid global rate limit: RequestsPerSecond cannot be negative (got %d)", limit)
 	}
 
-	// Skip global limiting when disabled (RequestsPerSecond == 0)
+	// Skip global limiting when disabled (RequestsPerSecond == 0).
 	if limit == 0 {
 		return nil // Global rate limiting disabled, continue with local-only
 	}
 
-	// Execute atomic Lua script for distributed rate limiting
+	// Execute atomic Lua script for distributed rate limiting.
 	result, err := script.Run(ctx, r.globalClient, []string{globalKey},
 		windowMs, limit).Result()
 	if err != nil {
 		return fmt.Errorf("global rate limit check failed: %w", err)
 	}
 
-	// Parse Redis response: [allowed, remaining_or_ttl]
+	// Parse Redis response: [allowed, remaining_or_ttl].
 	res, ok := result.([]any)
 	if !ok || len(res) < 2 {
 		r.logger.Warn("invalid Redis response format, switching to degraded mode", "response", result)
@@ -422,14 +461,13 @@ func (r *rateLimitMiddleware) checkGlobalLimit(ctx context.Context, key string) 
 	}
 
 	if allowed == 0 {
-		// Rate limit exceeded, extract retry timing from TTL
+		// Rate limit exceeded, extract retry timing from TTL.
 		retryAfterMs, ok := res[1].(int64)
 		if !ok || retryAfterMs <= 0 {
-			// Fallback to default interval on invalid TTL
+			// Fallback to default interval on invalid TTL.
 			retryAfterMs = int64(DefaultInitialInterval / time.Millisecond)
 		}
 
-		// Convert milliseconds to seconds with reasonable bounds
 		retryAfterSecs := int(retryAfterMs / MillisecondsPerSecond)
 		if retryAfterSecs < 1 {
 			retryAfterSecs = 1 // Minimum 1-second retry to prevent tight loops
@@ -552,18 +590,15 @@ func (r *rateLimitMiddleware) isRedisError(err error) bool {
 		return false
 	}
 
-	// Redis protocol and connection errors
 	var redisErr redis.Error
 	if errors.As(err, &redisErr) {
 		return true
 	}
 
-	// Context timeout and cancellation errors
 	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
 		return true
 	}
 
-	// Network I/O errors (connection failures, timeouts, DNS issues)
 	var netErr net.Error
 	if errors.As(err, &netErr) {
 		return true
@@ -582,7 +617,6 @@ func (r *rateLimitMiddleware) CleanupStale(before time.Time) {
 	r.localMu.Lock()
 	defer r.localMu.Unlock()
 
-	// Use the pre-calculated minimum TTL to avoid redundant calculations.
 	cutoff := before.Add(-r.limiterMinTTL).UnixNano()
 
 	for key, tl := range r.localLimiters {
@@ -627,7 +661,6 @@ type Stats struct {
 // of the Redis connection pool. These stats are essential for observing memory
 // usage, service availability, and connection efficiency.
 func (r *rateLimitMiddleware) GetStats() (*Stats, error) {
-	// Get local limiter count with read lock for thread safety
 	r.localMu.RLock()
 	localCount := len(r.localLimiters)
 	r.localMu.RUnlock()
@@ -638,7 +671,7 @@ func (r *rateLimitMiddleware) GetStats() (*Stats, error) {
 		DegradedMode:  r.globalConfig.DegradedMode.Load(), // Atomic read
 	}
 
-	// Include Redis pool statistics when global client is available
+	// Include Redis pool statistics when global client is available.
 	if r.globalClient != nil {
 		poolStats := r.globalClient.PoolStats()
 		stats.PoolHits = poolStats.Hits
@@ -707,11 +740,10 @@ func (r *rateLimitMiddleware) cleanupLoop() {
 	for {
 		select {
 		case <-r.cleanupTicker.C:
-			// Perform periodic cleanup of stale limiters
+			// Perform periodic cleanup of stale limiters.
 			cutoff := time.Now().Add(-LimiterTTL) // Calculate stale timestamp
 			r.CleanupStale(cutoff)
 		case <-r.cleanupStop:
-			// Graceful termination requested
 			return
 		}
 	}
