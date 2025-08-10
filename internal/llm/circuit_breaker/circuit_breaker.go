@@ -84,11 +84,11 @@ func (s CircuitState) String() string {
 	}
 }
 
-// CircuitResult represents the outcome of a circuit breaker request evaluation.
+// circuitResult represents the outcome of a circuit breaker request evaluation.
 // It encapsulates the request decision, required cleanup operations, and probe state
 // to provide clear semantics for circuit breaker operations and eliminate parameter confusion
 // in method signatures while maintaining thread-safe probe management.
-type CircuitResult struct {
+type circuitResult struct {
 	// Allowed indicates whether the circuit breaker permits the request to proceed.
 	Allowed bool
 	// Cleanup is the function that must be called when the request completes to properly
@@ -299,12 +299,12 @@ func newCircuitBreaker(cfg CircuitBreakerConfig) *circuitBreaker {
 // handleHalfOpenProbe manages the half-open probe logic shared by StateOpen and StateHalfOpen.
 // It handles probe slot allocation, cleanup function creation, and metrics tracking.
 // Returns a CircuitResult containing the request decision and required cleanup operations.
-func (cb *circuitBreaker) handleHalfOpenProbe() (*CircuitResult, error) {
+func (cb *circuitBreaker) handleHalfOpenProbe() (*circuitResult, error) {
 	for {
 		current := cb.halfOpenProbes.Load()
 		if int(current) >= cb.maxHalfOpenProbes {
 			cb.metrics.requestsRejected.Add(1)
-			return &CircuitResult{
+			return &circuitResult{
 					Allowed:         false,
 					Cleanup:         func() {},
 					IsHalfOpenProbe: false,
@@ -330,7 +330,7 @@ func (cb *circuitBreaker) handleHalfOpenProbe() (*CircuitResult, error) {
 			}
 			cb.metrics.probeAttempts.Add(1)
 			cb.metrics.requestsAllowed.Add(1)
-			return &CircuitResult{
+			return &circuitResult{
 				Allowed:         true,
 				Cleanup:         cleanup,
 				IsHalfOpenProbe: true,
@@ -345,13 +345,13 @@ func (cb *circuitBreaker) handleHalfOpenProbe() (*CircuitResult, error) {
 // manage probe counters and maintain accurate half-open state tracking across
 // concurrent operations. The probe status indicates if this request is a
 // half-open probe to eliminate race conditions.
-func (cb *circuitBreaker) allow() (*CircuitResult, error) {
+func (cb *circuitBreaker) allow() (*circuitResult, error) {
 	state := CircuitState(cb.state.Load())
 
 	switch state {
 	case StateClosed:
 		cb.metrics.requestsAllowed.Add(1)
-		return &CircuitResult{
+		return &circuitResult{
 			Allowed:         true,
 			Cleanup:         func() {},
 			IsHalfOpenProbe: false,
@@ -365,7 +365,7 @@ func (cb *circuitBreaker) allow() (*CircuitResult, error) {
 			timeout := cb.openTimeout + cb.getJitter()
 			if time.Since(lastFailure) <= timeout {
 				cb.metrics.requestsRejected.Add(1)
-				return &CircuitResult{
+				return &circuitResult{
 						Allowed:         false,
 						Cleanup:         func() {},
 						IsHalfOpenProbe: false,
@@ -382,7 +382,7 @@ func (cb *circuitBreaker) allow() (*CircuitResult, error) {
 		return cb.handleHalfOpenProbe()
 
 	default:
-		return &CircuitResult{
+		return &circuitResult{
 			Allowed:         false,
 			Cleanup:         func() {},
 			IsHalfOpenProbe: false,
