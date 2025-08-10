@@ -170,6 +170,7 @@ linters:
       - ".*\\.pb\\.go$"
       - ".*_generated\\.go$"
       - ".*retry\\.go$"
+      - ".*retry_.*\\.go$"
       - ".*circuitbreaker\\.go$"
       - ".*cache\\.go$"
     rules:

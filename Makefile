@@ -48,7 +48,7 @@ build: ## Build all binaries (worker and cli)
 .PHONY: test
 test: ## Run unit tests (excludes integration, fuzz, and benchmark tests)
 	@echo "Running unit tests..."
-	@$(GOTEST) $(TEST_FLAGS) -short -tags '!integration' -run '^Test[^F]' ./...
+	@$(GOTEST) $(TEST_FLAGS) -short -tags '!integration' -skip 'Fuzz' ./...
 
 .PHONY: test-race
 test-race: ## Run unit tests with race detection (excludes integration and fuzz tests)
