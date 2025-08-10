@@ -307,10 +307,11 @@ func (r *rateLimitMiddleware) isRedisError(err error) bool {
 
 // CleanupStale removes unused local rate limiters to prevent memory leaks.
 //
-// This method iterates through all local limiters and removes those that have
-// not been accessed since the provided `before` timestamp. It acquires a write
-// lock to ensure thread-safe modification of the limiter map. This function is
-// called periodically by the background cleanup goroutine.
+// This method removes limiters that have not been accessed since the provided
+// `before` timestamp, but first resets their tokens to prevent rate limit
+// bypass vulnerabilities. When a limiter is marked for deletion due to being
+// stale, it is first reset to an empty state before removal to ensure any
+// final access cannot benefit from accumulated tokens.
 func (r *rateLimitMiddleware) CleanupStale(before time.Time) {
 	r.localMu.Lock()
 	defer r.localMu.Unlock()
@@ -319,6 +320,9 @@ func (r *rateLimitMiddleware) CleanupStale(before time.Time) {
 
 	for key, tl := range r.localLimiters {
 		if tl.lastUsed.Load() < cutoff {
+			// First reset limiter to prevent rate limit bypass if accessed
+			// during deletion, then remove for memory management.
+			tl.limiter = rate.NewLimiter(rate.Limit(r.localConfig.TokensPerSecond), 0)
 			delete(r.localLimiters, key)
 		}
 	}
