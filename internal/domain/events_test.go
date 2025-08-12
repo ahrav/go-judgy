@@ -1,7 +1,6 @@
 package domain
 
 import (
-	"context"
 	"encoding/json"
 	"testing"
 	"time"
@@ -1292,101 +1291,11 @@ func TestNewLLMUsageEvent(t *testing.T) {
 	}
 }
 
-func TestNoOpEventSink_Append(t *testing.T) {
-	sink := &NoOpEventSink{}
-	ctx := context.Background()
+// TestNoOpEventSink_Append has been removed since NoOpEventSink is now in pkg/events package
 
-	tests := []struct {
-		name     string
-		envelope EventEnvelope
-	}{
-		{
-			name: "valid envelope",
-			envelope: EventEnvelope{
-				IdempotencyKey: "test-key",
-				EventType:      EventTypeCandidateProduced,
-				Version:        1,
-				OccurredAt:     time.Now(),
-				TenantID:       uuid.New(),
-				WorkflowID:     "workflow-123",
-				RunID:          "run-456",
-				Payload:        json.RawMessage(`{"test": "data"}`),
-				Producer:       "test-producer",
-			},
-		},
-		{
-			name: "invalid envelope",
-			envelope: EventEnvelope{
-				// Missing required fields
-				EventType: EventTypeLLMUsage,
-			},
-		},
-		{
-			name:     "zero value envelope",
-			envelope: EventEnvelope{},
-		},
-	}
+// TestNewNoOpEventSink has been removed since NoOpEventSink is now in pkg/events package
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			err := sink.Append(ctx, tt.envelope)
-			assert.NoError(t, err, "NoOpEventSink should always succeed")
-		})
-	}
-
-	// Test with nil context
-	t.Run("nil context", func(t *testing.T) {
-		err := sink.Append(nil, EventEnvelope{})
-		assert.NoError(t, err, "NoOpEventSink should handle nil context")
-	})
-
-	// Test with cancelled context
-	t.Run("cancelled context", func(t *testing.T) {
-		ctx, cancel := context.WithCancel(context.Background())
-		cancel()
-
-		err := sink.Append(ctx, EventEnvelope{})
-		assert.NoError(t, err, "NoOpEventSink should ignore context cancellation")
-	})
-}
-
-func TestNewNoOpEventSink(t *testing.T) {
-	sink := NewNoOpEventSink()
-
-	// Should return a non-nil EventSink
-	assert.NotNil(t, sink)
-
-	// Should be of correct type
-	assert.IsType(t, &NoOpEventSink{}, sink)
-
-	// Should implement EventSink interface
-	var _ EventSink = sink
-
-	// Should work as expected
-	err := sink.Append(context.Background(), EventEnvelope{})
-	assert.NoError(t, err)
-}
-
-// Test that EventSink interface is satisfied by NoOpEventSink
-func TestEventSink_Interface(t *testing.T) {
-	var sink EventSink = &NoOpEventSink{}
-
-	ctx := context.Background()
-	envelope := EventEnvelope{
-		IdempotencyKey: "test-key",
-		EventType:      EventTypeCandidateProduced,
-		Version:        1,
-		OccurredAt:     time.Now(),
-		TenantID:       uuid.New(),
-		WorkflowID:     "workflow-123",
-		RunID:          "run-456",
-		Payload:        json.RawMessage(`{"test": "data"}`),
-		Producer:       "test-producer",
-	}
-
-	err := sink.Append(ctx, envelope)
-	assert.NoError(t, err)
-}
+// TestEventSink_Interface has been removed since EventSink interface is now in pkg/events package
 
 // Test edge cases for JSON marshaling in constructor functions
 func TestEventCreation_JSONMarshaling(t *testing.T) {

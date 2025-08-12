@@ -15,7 +15,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"sort"
 	"sync"
 	"time"
 
@@ -30,22 +29,6 @@ import (
 	"github.com/ahrav/go-judgy/internal/llm/retry"
 	"github.com/ahrav/go-judgy/internal/llm/transport"
 )
-
-// answerJob represents a job to generate a single answer.
-// Used for distributing work across concurrent worker goroutines.
-type answerJob struct {
-	Index   int                // Answer index in the original request
-	Request *transport.Request // The transport request to process
-}
-
-// answerResult represents the result of processing an answer job.
-// Includes the answer, any error, and metrics for safe aggregation.
-type answerResult struct {
-	Index      int            // Original answer index for ordering
-	Answer     *domain.Answer // Generated answer (nil if error occurred)
-	Error      error          // Any error that occurred during processing
-	TokensUsed int64          // Number of tokens used for this request
-}
 
 // artifactStoreAdapter adapts business.ArtifactStore to transport.ArtifactStore.
 // It provides artifact storage capabilities for the transport layer while
@@ -349,19 +332,30 @@ func NewClient(cfg *configuration.Config) (Client, error) {
 	}, nil
 }
 
-// Generate implements Client.Generate with comprehensive resilience patterns.
-// Processes requests through the complete middleware pipeline including caching,
-// circuit breaking, rate limiting, and retry logic for robust answer generation.
-func (c *client) Generate(
-	ctx context.Context, in domain.GenerateAnswersInput,
-) (*domain.GenerateAnswersOutput, error) {
-	output := &domain.GenerateAnswersOutput{
+// baseRequest returns a value (not pointer) you can copy per attempt safely.
+func (c *client) baseRequest(ctx context.Context, in domain.GenerateAnswersInput) transport.Request {
+	return transport.Request{
+		Operation:   transport.OpGeneration,
+		Provider:    in.Config.Provider,
+		Model:       in.Config.Model,
+		TenantID:    transport.ExtractTenantID(ctx),
+		Question:    in.Question,
+		MaxTokens:   in.Config.MaxAnswerTokens,
+		Temperature: in.Config.Temperature,
+		Timeout:     time.Duration(in.Config.Timeout) * time.Second,
+		TraceID:     transport.ExtractTraceID(ctx),
+		// ArtifactStore intentionally not set here to avoid sharing a mutable adapter
+		// across goroutines; assigned per-request in the loop above.
+	}
+}
+
+// Generate implements Client.Generate with bounded concurrency and no code duplication.
+func (c *client) Generate(ctx context.Context, in domain.GenerateAnswersInput) (*domain.GenerateAnswersOutput, error) {
+	out := &domain.GenerateAnswersOutput{
 		Answers: make([]domain.Answer, 0, in.NumAnswers),
 	}
 
-	// Generate canonical idempotency key for the entire generation request.
-	// This key represents the logical request and will be used as the single
-	// source of truth for event deduplication.
+	// Canonical idempotency key for the logical request.
 	canonicalReq := &transport.Request{
 		Operation:   transport.OpGeneration,
 		Provider:    in.Config.Provider,
@@ -371,183 +365,97 @@ func (c *client) Generate(
 		MaxTokens:   in.Config.MaxAnswerTokens,
 		Temperature: in.Config.Temperature,
 	}
-
 	canonicalKey, err := transport.GenerateIdemKey(canonicalReq)
 	if err != nil {
-		output.Error = fmt.Sprintf("failed to generate canonical idempotency key: %v", err)
-		return output, nil
+		out.Error = fmt.Sprintf("failed to generate canonical idempotency key: %v", err)
+		return out, nil
+	}
+	out.ClientIdemKey = canonicalKey.String()
+
+	n := in.NumAnswers
+	if n <= 0 {
+		out.Error = "no answers requested"
+		return out, nil
 	}
 
-	// Store the canonical key in the output for the activity to use.
-	output.ClientIdemKey = canonicalKey.String()
-
-	maxConcurrency := c.config.MaxConcurrency
-	if maxConcurrency <= 0 {
-		maxConcurrency = configuration.DefaultMaxConcurrency
+	// Concurrency cap.
+	maxConc := c.config.MaxConcurrency
+	if maxConc <= 0 {
+		maxConc = configuration.DefaultMaxConcurrency
+	}
+	if maxConc > n {
+		maxConc = n
 	}
 
-	if in.NumAnswers == 1 || maxConcurrency == 1 {
-		return c.generateSequential(ctx, in, output, canonicalKey.String())
+	base := c.baseRequest(ctx, in) // by-value
+
+	type res struct {
+		ans    *domain.Answer
+		tokens int64
+		err    error
 	}
+	results := make([]res, n)
 
-	return c.generateConcurrent(ctx, in, output, canonicalKey.String(), maxConcurrency)
-}
-
-// generateSequential processes answer requests sequentially, preserving the original behavior.
-// Used for single answers or when concurrency is disabled.
-func (c *client) generateSequential(
-	ctx context.Context,
-	in domain.GenerateAnswersInput,
-	output *domain.GenerateAnswersOutput,
-	canonicalKey string,
-) (*domain.GenerateAnswersOutput, error) {
-	for i := 0; i < in.NumAnswers; i++ {
-		req := &transport.Request{
-			Operation:     transport.OpGeneration,
-			Provider:      in.Config.Provider,
-			Model:         in.Config.Model,
-			TenantID:      transport.ExtractTenantID(ctx),
-			Question:      in.Question,
-			MaxTokens:     in.Config.MaxAnswerTokens,
-			Temperature:   in.Config.Temperature,
-			Timeout:       time.Duration(in.Config.Timeout) * time.Second,
-			TraceID:       transport.ExtractTraceID(ctx),
-			ArtifactStore: newArtifactStoreAdapter(c.artifactStore),
-		}
-
-		answerKey := fmt.Sprintf("%s:answer:%d", canonicalKey, i)
-		req.IdempotencyKey = answerKey
-
-		resp, err := c.handler.Handle(ctx, req)
-		if err != nil {
-			output.Error = fmt.Sprintf("failed to generate answer %d: %v", i+1, err)
-			continue
-		}
-
-		answer := transport.ResponseToAnswer(resp, req)
-		output.Answers = append(output.Answers, *answer)
-
-		output.TokensUsed += resp.Usage.TotalTokens
-		output.CallsMade++
-	}
-
-	if len(output.Answers) == 0 && output.Error == "" {
-		output.Error = "no answers generated"
-	}
-
-	return output, nil
-}
-
-// generateConcurrent processes answer requests concurrently using a worker pool pattern.
-// Maintains result ordering and provides safe metric aggregation.
-func (c *client) generateConcurrent(
-	ctx context.Context,
-	in domain.GenerateAnswersInput,
-	output *domain.GenerateAnswersOutput,
-	canonicalKey string,
-	maxConcurrency int,
-) (*domain.GenerateAnswersOutput, error) {
-	effectiveWorkers := min(in.NumAnswers, maxConcurrency)
-
-	jobs := make(chan answerJob, in.NumAnswers)
-	results := make(chan answerResult, in.NumAnswers)
-
+	sem := make(chan struct{}, maxConc)
 	var wg sync.WaitGroup
-	for w := 0; w < effectiveWorkers; w++ {
-		wg.Add(1)
-		go c.answerWorker(ctx, jobs, results, &wg)
-	}
+	wg.Add(n)
 
-	for i := 0; i < in.NumAnswers; i++ {
-		req := &transport.Request{
-			Operation:     transport.OpGeneration,
-			Provider:      in.Config.Provider,
-			Model:         in.Config.Model,
-			TenantID:      transport.ExtractTenantID(ctx),
-			Question:      in.Question,
-			MaxTokens:     in.Config.MaxAnswerTokens,
-			Temperature:   in.Config.Temperature,
-			Timeout:       time.Duration(in.Config.Timeout) * time.Second,
-			TraceID:       transport.ExtractTraceID(ctx),
-			ArtifactStore: newArtifactStoreAdapter(c.artifactStore),
-		}
+	for i := range n {
+		sem <- struct{}{}
+		go func() {
+			defer wg.Done()
+			defer func() { <-sem }()
 
-		answerKey := fmt.Sprintf("%s:answer:%d", canonicalKey, i)
-		req.IdempotencyKey = answerKey
+			// Copy per task to avoid races.
+			req := base
+			req.IdempotencyKey = fmt.Sprintf("%s:answer:%d", canonicalKey, i)
+			// Keep one adapter per request (matches original semantics).
+			req.ArtifactStore = newArtifactStoreAdapter(c.artifactStore)
 
-		jobs <- answerJob{Index: i, Request: req}
-	}
-	close(jobs)
-
-	go func() {
-		wg.Wait()
-		close(results)
-	}()
-
-	allResults := make([]answerResult, 0, in.NumAnswers)
-	for result := range results {
-		allResults = append(allResults, result)
-	}
-
-	// Sort results by index to maintain order
-	sort.Slice(allResults, func(i, j int) bool {
-		return allResults[i].Index < allResults[j].Index
-	})
-
-	var totalTokens int64
-	var callsMade int64
-	for _, result := range allResults {
-		if result.Error != nil {
-			if output.Error == "" {
-				output.Error = fmt.Sprintf("failed to generate answer %d: %v", result.Index+1, result.Error)
+			resp, err := c.handler.Handle(ctx, &req)
+			if err != nil {
+				results[i] = res{err: err}
+				return
 			}
+			ans := transport.ResponseToAnswer(resp, &req)
+			results[i] = res{
+				ans:    ans,
+				tokens: resp.Usage.TotalTokens,
+			}
+		}()
+	}
+
+	wg.Wait()
+
+	// Aggregate in order (already indexed; no sort needed).
+	var (
+		firstErr error
+		tokens   int64
+		calls    int64
+	)
+	for i := range n {
+		r := results[i]
+		if r.err != nil && firstErr == nil {
+			firstErr = fmt.Errorf("failed to generate answer %d: %w", i+1, r.err)
 			continue
 		}
-
-		if result.Answer != nil {
-			output.Answers = append(output.Answers, *result.Answer)
-		}
-
-		totalTokens += result.TokensUsed
-		callsMade++
-	}
-
-	output.TokensUsed = totalTokens
-	output.CallsMade = callsMade
-
-	if len(output.Answers) == 0 && output.Error == "" {
-		output.Error = "no answers generated"
-	}
-
-	return output, nil
-}
-
-// answerWorker processes answer jobs from the jobs channel and sends results to the results channel.
-func (c *client) answerWorker(
-	ctx context.Context,
-	jobs <-chan answerJob,
-	results chan<- answerResult,
-	wg *sync.WaitGroup,
-) {
-	defer wg.Done()
-
-	for job := range jobs {
-		resp, err := c.handler.Handle(ctx, job.Request)
-		if err != nil {
-			results <- answerResult{
-				Index: job.Index,
-				Error: err,
-			}
-			continue
-		}
-
-		answer := transport.ResponseToAnswer(resp, job.Request)
-		results <- answerResult{
-			Index:      job.Index,
-			Answer:     answer,
-			TokensUsed: int64(resp.Usage.TotalTokens),
+		if r.ans != nil {
+			out.Answers = append(out.Answers, *r.ans)
+			tokens += r.tokens
+			calls++
 		}
 	}
+	out.TokensUsed = tokens
+	out.CallsMade = calls
+
+	if firstErr != nil {
+		out.Error = firstErr.Error()
+	}
+	if len(out.Answers) == 0 && out.Error == "" {
+		out.Error = "no answers generated"
+	}
+
+	return out, nil
 }
 
 // Score implements Client.Score with JSON validation and repair capabilities.

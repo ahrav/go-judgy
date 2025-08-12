@@ -45,7 +45,7 @@ func FuzzGenerateIdempotencyKey(f *testing.F) {
 
 		// Key should be valid hex
 		for i, r := range key {
-			if !((r >= '0' && r <= '9') || (r >= 'a' && r <= 'f')) {
+			if (r < '0' || r > '9') && (r < 'a' || r > 'f') {
 				t.Errorf("GenerateIdempotencyKey returned invalid hex character %c at position %d for clientKey=%q, suffix=%q", r, i, clientKey, suffix)
 				break
 			}
@@ -100,7 +100,7 @@ func FuzzCandidateProducedIdempotencyKey(f *testing.F) {
 
 		// Key should be valid hex
 		for i, r := range key {
-			if !((r >= '0' && r <= '9') || (r >= 'a' && r <= 'f')) {
+			if (r < '0' || r > '9') && (r < 'a' || r > 'f') {
 				t.Errorf("CandidateProducedIdempotencyKey returned invalid hex character %c at position %d for clientKey=%q, index=%d", r, i, clientKey, index)
 				break
 			}
@@ -164,7 +164,7 @@ func FuzzLLMUsageIdempotencyKey(f *testing.F) {
 
 		// Key should be valid hex
 		for i, r := range key {
-			if !((r >= '0' && r <= '9') || (r >= 'a' && r <= 'f')) {
+			if (r < '0' || r > '9') && (r < 'a' || r > 'f') {
 				t.Errorf("LLMUsageIdempotencyKey returned invalid hex character %c at position %d for clientKey=%q", r, i, clientKey)
 				break
 			}

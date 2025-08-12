@@ -298,6 +298,71 @@ func ArePayloadsEquivalent(p1, p2 *CanonicalPayload) (bool, error) {
 	return key1 == key2, nil
 }
 
+// BuildCanonicalPayloadFromGenerate builds a canonical payload from generation input.
+// This is used for fallback idempotency when the client doesn't provide an idem key.
+// It mirrors the exact canonicalization that would be done by the LLM client.
+func BuildCanonicalPayloadFromGenerate(
+	tenantID string,
+	question string,
+	provider string,
+	model string,
+	systemPrompt string,
+	maxTokens int,
+	temperature float64,
+) (*CanonicalPayload, error) {
+	payload := &CanonicalPayload{
+		TenantID:  tenantID,
+		Operation: OpGeneration,
+		Provider:  strings.ToLower(strings.TrimSpace(provider)),
+		Model:     strings.TrimSpace(model),
+		Version:   CurrentCanonicalVersion,
+	}
+
+	// Normalize system prompt for consistent hashing.
+	if systemPrompt != "" {
+		payload.System = normalizeText(systemPrompt)
+	}
+
+	// Build normalized messages for generation.
+	messages := []CanonicalMessage{}
+	if question != "" {
+		messages = append(messages, CanonicalMessage{
+			Role:    "user",
+			Content: normalizeText(question),
+		})
+	}
+	payload.Messages = messages
+
+	params := make(map[string]any)
+	// Include only non-default parameters to minimize cache key variations.
+	if maxTokens > 0 {
+		params["max_tokens"] = maxTokens
+	}
+	if temperature != 0.0 {
+		params["temperature"] = temperature
+	}
+
+	if len(params) > 0 {
+		payload.Params = params
+	}
+
+	return payload, nil
+}
+
+// HashCanonicalPayload generates a SHA-256 hash for a canonical payload.
+// This provides a deterministic idempotency key for fallback scenarios.
+func HashCanonicalPayload(payload *CanonicalPayload) string {
+	key, err := BuildIdemKey(payload)
+	if err != nil {
+		// In case of error, return a simple hash of the tenant and operation
+		// This ensures we always have some form of idempotency.
+		fallback := fmt.Sprintf("%s:%s", payload.TenantID, payload.Operation)
+		hash := sha256.Sum256([]byte(fallback))
+		return hex.EncodeToString(hash[:])
+	}
+	return string(key)
+}
+
 // IdempotentCacheEntry is the persisted result keyed by IdemKey (success-only).
 type IdempotentCacheEntry struct {
 	Provider            string            `json:"provider"`

@@ -1,7 +1,6 @@
 package domain
 
 import (
-	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -143,23 +142,6 @@ type LLMUsagePayload struct {
 // Validate checks if the payload meets all requirements.
 func (l *LLMUsagePayload) Validate() error {
 	return validate.Struct(l)
-}
-
-// EventSink defines the interface for emitting events to downstream consumers.
-// Implementations could include database outbox patterns, message queues,
-// or event streaming platforms. The interface provides clean abstraction
-// for testing and enables multiple event sinks in the future.
-type EventSink interface {
-	// Append adds an event to the sink with best-effort delivery.
-	// Returns error if the event cannot be queued, but callers should
-	// not fail their primary operation due to event sink failures.
-	//
-	// Implementations should:
-	// - Validate the envelope before storage
-	// - Handle idempotency (duplicate events should be no-ops)
-	// - Retry briefly on transient failures
-	// - Return quickly to avoid blocking the caller
-	Append(ctx context.Context, envelope EventEnvelope) error
 }
 
 // NewEventEnvelope creates a new EventEnvelope with required fields populated.
@@ -311,19 +293,4 @@ func NewLLMUsageEvent(
 	}
 
 	return envelope, nil
-}
-
-// NoOpEventSink is a null implementation of EventSink for testing or when events are disabled.
-// All Append calls succeed immediately without side effects.
-type NoOpEventSink struct{}
-
-// Append implements EventSink.Append with no-op behavior.
-func (n *NoOpEventSink) Append(_ context.Context, _ EventEnvelope) error {
-	return nil // Always succeeds
-}
-
-// NewNoOpEventSink creates a new no-op event sink.
-// Useful for testing or when event emission should be disabled.
-func NewNoOpEventSink() EventSink {
-	return &NoOpEventSink{}
 }

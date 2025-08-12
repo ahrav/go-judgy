@@ -1,5 +1,5 @@
 //nolint:testpackage // Tests need access to unexported functions like nonRetryable
-package activity
+package aggregation
 
 import (
 	"context"
@@ -10,6 +10,7 @@ import (
 	"go.temporal.io/sdk/temporal"
 
 	"github.com/ahrav/go-judgy/internal/domain"
+	"github.com/ahrav/go-judgy/pkg/activity"
 )
 
 // TestAggregateScores verifies that AggregateScores returns proper error handling
@@ -17,11 +18,15 @@ import (
 // parameter handling, and deterministic behavior required for Temporal activities.
 func TestAggregateScores(t *testing.T) {
 	t.Run("returns not implemented error", func(t *testing.T) {
+		// Create activities instance
+		base := activity.BaseActivities{}
+		activities := NewActivities(base)
+
 		ctx := context.Background()
 		input := createValidAggregateScoresInput()
 
 		// Execute the function
-		result, err := AggregateScores(ctx, input)
+		result, err := activities.AggregateScores(ctx, input)
 
 		// Verify it returns error and no result
 		require.Error(t, err, "AggregateScores should return error")
@@ -36,17 +41,21 @@ func TestAggregateScores(t *testing.T) {
 	})
 
 	t.Run("ignores context and input parameters", func(t *testing.T) {
+		// Create activities instance
+		base := activity.BaseActivities{}
+		activities := NewActivities(base)
+
 		// Test that the stub function ignores its parameters as expected
 		// This verifies the function signature is correct
 
 		// Test with nil context (should not panic)
-		result1, err1 := AggregateScores(context.TODO(), domain.AggregateScoresInput{})
+		result1, err1 := activities.AggregateScores(context.TODO(), domain.AggregateScoresInput{})
 		require.Error(t, err1, "should return error with nil context")
 		assert.Nil(t, result1, "should return nil result")
 
 		// Test with empty input (should not panic)
 		ctx := context.Background()
-		result2, err2 := AggregateScores(ctx, domain.AggregateScoresInput{})
+		result2, err2 := activities.AggregateScores(ctx, domain.AggregateScoresInput{})
 		require.Error(t, err2, "should return error with empty input")
 		assert.Nil(t, result2, "should return nil result")
 
@@ -55,10 +64,14 @@ func TestAggregateScores(t *testing.T) {
 	})
 
 	t.Run("error contains expected information", func(t *testing.T) {
+		// Create activities instance
+		base := activity.BaseActivities{}
+		activities := NewActivities(base)
+
 		ctx := context.Background()
 		input := createValidAggregateScoresInput()
 
-		_, err := AggregateScores(ctx, input)
+		_, err := activities.AggregateScores(ctx, input)
 		require.Error(t, err, "should return error")
 
 		// Verify error chain
@@ -71,15 +84,19 @@ func TestAggregateScores(t *testing.T) {
 	})
 
 	t.Run("pure function property", func(t *testing.T) {
+		// Create activities instance
+		base := activity.BaseActivities{}
+		activities := NewActivities(base)
+
 		// Test that the function is deterministic (pure function)
 		// Even though it's just a stub, it should behave consistently
 		ctx := context.Background()
 		input := createValidAggregateScoresInput()
 
 		// Call multiple times and verify consistent behavior
-		_, err1 := AggregateScores(ctx, input)
-		_, err2 := AggregateScores(ctx, input)
-		_, err3 := AggregateScores(ctx, input)
+		_, err1 := activities.AggregateScores(ctx, input)
+		_, err2 := activities.AggregateScores(ctx, input)
+		_, err3 := activities.AggregateScores(ctx, input)
 
 		require.Error(t, err1, "first call should return error")
 		require.Error(t, err2, "second call should return error")

@@ -1,5 +1,5 @@
 //nolint:testpackage // Tests need access to unexported functions like nonRetryable
-package activity
+package generation
 
 import (
 	"context"
@@ -16,6 +16,7 @@ import (
 
 	"github.com/ahrav/go-judgy/internal/domain"
 	"github.com/ahrav/go-judgy/internal/llm/business"
+	"github.com/ahrav/go-judgy/pkg/activity"
 )
 
 // TestGenerateAnswers verifies that GenerateAnswers returns appropriate error handling
@@ -27,7 +28,8 @@ func TestGenerateAnswers(t *testing.T) {
 		mockClient := newMockLLMClient()
 		mockClient.generateReturnsError = false // Enable successful generation
 		artifactStore := business.NewInMemoryArtifactStore()
-		activities := NewActivities(mockClient, artifactStore, domain.NewNoOpEventSink())
+		base := activity.BaseActivities{}
+		activities := NewActivities(base, mockClient, artifactStore)
 
 		ctx := context.Background()
 		input := createValidGenerateAnswersInput()
@@ -52,7 +54,8 @@ func TestGenerateAnswers(t *testing.T) {
 		mockClient := newMockLLMClient()
 		mockClient.generateReturnsError = true // Force error
 		artifactStore := business.NewInMemoryArtifactStore()
-		activities := NewActivities(mockClient, artifactStore, domain.NewNoOpEventSink())
+		base := activity.BaseActivities{}
+		activities := NewActivities(base, mockClient, artifactStore)
 
 		ctx := context.Background()
 		input := createValidGenerateAnswersInput()
@@ -75,7 +78,8 @@ func TestGenerateAnswers(t *testing.T) {
 		// Create activities with mock client for parameter testing.
 		mockClient := newMockLLMClient()
 		artifactStore := business.NewInMemoryArtifactStore()
-		activities := NewActivities(mockClient, artifactStore, domain.NewNoOpEventSink())
+		base := activity.BaseActivities{}
+		activities := NewActivities(base, mockClient, artifactStore)
 
 		// Test with empty input (should validate and return error).
 		ctx := context.Background()
@@ -96,7 +100,8 @@ func TestGenerateAnswers(t *testing.T) {
 		mockClient := newMockLLMClient()
 		mockClient.generateReturnsError = false
 		artifactStore := business.NewInMemoryArtifactStore()
-		activities := NewActivities(mockClient, artifactStore, domain.NewNoOpEventSink())
+		base := activity.BaseActivities{}
+		activities := NewActivities(base, mockClient, artifactStore)
 
 		ctx := context.Background()
 		input := createValidGenerateAnswersInput()
@@ -217,7 +222,8 @@ func TestCleanupArtifacts(t *testing.T) {
 	t.Run("cleanup handles existing artifacts", func(t *testing.T) {
 		mockClient := newMockLLMClient()
 		artifactStore := business.NewInMemoryArtifactStore()
-		activities := NewActivities(mockClient, artifactStore, domain.NewNoOpEventSink())
+		base := activity.BaseActivities{}
+		activities := NewActivities(base, mockClient, artifactStore)
 
 		// Create some test artifacts
 		ref1, err := artifactStore.Put(context.Background(), "content1", domain.ArtifactAnswer, "test-key-1")
@@ -244,7 +250,8 @@ func TestCleanupArtifacts(t *testing.T) {
 	t.Run("cleanup handles empty artifacts list", func(t *testing.T) {
 		mockClient := newMockLLMClient()
 		artifactStore := business.NewInMemoryArtifactStore()
-		activities := NewActivities(mockClient, artifactStore, domain.NewNoOpEventSink())
+		base := activity.BaseActivities{}
+		activities := NewActivities(base, mockClient, artifactStore)
 
 		// Test cleanup with empty list (should not panic)
 		activities.cleanupArtifacts(context.Background(), []domain.Answer{})
@@ -256,7 +263,8 @@ func TestAdditionalCoverage(t *testing.T) {
 	t.Run("storeAnswerContent with existing artifact reference", func(t *testing.T) {
 		mockClient := newMockLLMClient()
 		artifactStore := business.NewInMemoryArtifactStore()
-		activities := NewActivities(mockClient, artifactStore, domain.NewNoOpEventSink())
+		base := activity.BaseActivities{}
+		activities := NewActivities(base, mockClient, artifactStore)
 
 		// First, actually store content with the expected key
 		existingRef, err := artifactStore.Put(context.Background(), "existing content", domain.ArtifactAnswer, "existing-key")
@@ -269,8 +277,7 @@ func TestAdditionalCoverage(t *testing.T) {
 		}
 
 		// Should return existing reference without storing new content
-		mockOutput := &domain.GenerateAnswersOutput{}
-		ref, err := activities.storeAnswerContent(context.Background(), answer, "test-workflow", mockOutput)
+		ref, err := activities.StoreAnswerContent(context.Background(), answer, "test-workflow", "test-tenant", "test-idem-key", 0)
 		require.NoError(t, err)
 		assert.Equal(t, "existing-key", ref.Key)
 		assert.Equal(t, domain.ArtifactAnswer, ref.Kind)
@@ -279,7 +286,8 @@ func TestAdditionalCoverage(t *testing.T) {
 	t.Run("storeAnswerContent fallback path without content metadata", func(t *testing.T) {
 		mockClient := newMockLLMClient()
 		artifactStore := business.NewInMemoryArtifactStore()
-		activities := NewActivities(mockClient, artifactStore, domain.NewNoOpEventSink())
+		base := activity.BaseActivities{}
+		activities := NewActivities(base, mockClient, artifactStore)
 
 		// Create an answer without content metadata
 		answer := domain.Answer{
@@ -288,8 +296,7 @@ func TestAdditionalCoverage(t *testing.T) {
 		}
 
 		// Should use fallback content generation
-		mockOutput := &domain.GenerateAnswersOutput{}
-		ref, err := activities.storeAnswerContent(context.Background(), answer, "test-workflow", mockOutput)
+		ref, err := activities.StoreAnswerContent(context.Background(), answer, "test-workflow", "test-tenant", "test-idem-key", 0)
 		require.NoError(t, err)
 		assert.NotEmpty(t, ref.Key)
 
@@ -314,12 +321,15 @@ func createValidGenerateAnswersInput() domain.GenerateAnswersInput {
 // TestGenerateAnswersComprehensive provides comprehensive testing of the GenerateAnswers activity
 // including concurrency scenarios, failure handling, artifact management, and edge cases.
 func TestGenerateAnswersComprehensive(t *testing.T) {
-	t.Run("concurrent access safety", func(t *testing.T) {
+	t.Run("concurrent access safety with idempotent keys", func(t *testing.T) {
 		// Test concurrent access to the same activity instance
-		mockClient := newMockLLMClient()
+		eventSink := NewCapturingEventSink()
+		mockClient := NewEnhancedMockClient()
 		mockClient.generateReturnsError = false
+
+		base := activity.NewBaseActivities(eventSink)
 		artifactStore := business.NewInMemoryArtifactStore()
-		activities := NewActivities(mockClient, artifactStore, domain.NewNoOpEventSink())
+		activities := NewActivities(base, mockClient, artifactStore)
 
 		const numRoutines = 10
 		var wg sync.WaitGroup
@@ -348,13 +358,27 @@ func TestGenerateAnswersComprehensive(t *testing.T) {
 			assert.Len(t, results[i].Answers, 1, "concurrent call %d should return one answer", i)
 		}
 
-		// Verify artifacts were stored uniquely
-		uniqueKeys := make(map[string]bool)
-		for i, result := range results {
-			key := result.Answers[0].ContentRef.Key
-			assert.NotEmpty(t, key, "result %d should have artifact key", i)
-			assert.False(t, uniqueKeys[key], "artifact key should be unique for result %d", i)
-			uniqueKeys[key] = true
+		// Verify artifacts have identical keys (idempotent behavior)
+		if len(results) > 0 && len(results[0].Answers) > 0 {
+			expectedKey := results[0].Answers[0].ContentRef.Key
+			assert.NotEmpty(t, expectedKey, "first result should have artifact key")
+
+			for i := 1; i < numRoutines; i++ {
+				if len(results[i].Answers) > 0 {
+					actualKey := results[i].Answers[0].ContentRef.Key
+					assert.Equal(t, expectedKey, actualKey,
+						"result %d should have identical artifact key due to idempotency", i)
+				}
+			}
+		}
+
+		// Verify all results have same ClientIdemKey
+		if len(results) > 0 {
+			expectedIdemKey := results[0].ClientIdemKey
+			for i := 1; i < numRoutines; i++ {
+				assert.Equal(t, expectedIdemKey, results[i].ClientIdemKey,
+					"result %d should have identical ClientIdemKey", i)
+			}
 		}
 	})
 
@@ -363,7 +387,8 @@ func TestGenerateAnswersComprehensive(t *testing.T) {
 		failingStore := &failingArtifactStore{failures: 1}
 		mockClient := newMockLLMClient()
 		mockClient.generateReturnsError = false
-		activities := NewActivities(mockClient, failingStore, domain.NewNoOpEventSink())
+		base := activity.BaseActivities{}
+		activities := NewActivities(base, mockClient, failingStore)
 
 		ctx := context.Background()
 		input := createValidGenerateAnswersInput()
@@ -384,7 +409,8 @@ func TestGenerateAnswersComprehensive(t *testing.T) {
 		mockClient := newMockLLMClient()
 		mockClient.generateReturnsError = false
 		artifactStore := business.NewInMemoryArtifactStore()
-		activities := NewActivities(mockClient, artifactStore, domain.NewNoOpEventSink())
+		base := activity.BaseActivities{}
+		activities := NewActivities(base, mockClient, artifactStore)
 
 		ctx := context.Background()
 		input := createValidGenerateAnswersInput()
@@ -407,7 +433,8 @@ func TestGenerateAnswersComprehensive(t *testing.T) {
 		// Test with multiple answers to verify batch processing
 		mockClient := &multiAnswerMockClient{numAnswers: 3}
 		artifactStore := business.NewInMemoryArtifactStore()
-		activities := NewActivities(mockClient, artifactStore, domain.NewNoOpEventSink())
+		base := activity.BaseActivities{}
+		activities := NewActivities(base, mockClient, artifactStore)
 
 		ctx := context.Background()
 		input := createValidGenerateAnswersInput()
@@ -419,24 +446,42 @@ func TestGenerateAnswersComprehensive(t *testing.T) {
 		require.NotNil(t, result)
 		assert.Len(t, result.Answers, 3, "should return three answers")
 
-		// Verify each answer has unique artifact reference
-		keys := make(map[string]bool)
+		// Verify each answer has deterministic artifact reference based on index
+		// Keys should be different for different indices but same for same index across runs
+		keys := make(map[string]int)
 		for i, answer := range result.Answers {
 			assert.NotEmpty(t, answer.ContentRef.Key, "answer %d should have artifact key", i)
-			assert.False(t, keys[answer.ContentRef.Key], "answer %d should have unique artifact key", i)
-			keys[answer.ContentRef.Key] = true
+
+			// Check that each index produces a unique key
+			if existingIdx, exists := keys[answer.ContentRef.Key]; exists {
+				t.Errorf("answer %d has same key as answer %d, keys should differ by index", i, existingIdx)
+			}
+			keys[answer.ContentRef.Key] = i
 
 			// Verify content was stored
 			content, err := artifactStore.Get(ctx, answer.ContentRef)
 			require.NoError(t, err, "should be able to retrieve content for answer %d", i)
 			assert.Contains(t, content, fmt.Sprintf("answer #%d", i+1), "content should match for answer %d", i)
 		}
+
+		// Run again with same input to verify idempotency
+		result2, err2 := activities.GenerateAnswers(ctx, input)
+		require.NoError(t, err2)
+		require.NotNil(t, result2)
+		assert.Len(t, result2.Answers, 3, "second run should also return three answers")
+
+		// Verify artifact keys are identical across runs
+		for i := range result.Answers {
+			assert.Equal(t, result.Answers[i].ContentRef.Key, result2.Answers[i].ContentRef.Key,
+				"Answer %d should have identical artifact key across runs", i)
+		}
 	})
 
 	t.Run("context cancellation handling", func(t *testing.T) {
 		mockClient := &slowMockLLMClient{delay: time.Millisecond * 100}
 		artifactStore := business.NewInMemoryArtifactStore()
-		activities := NewActivities(mockClient, artifactStore, domain.NewNoOpEventSink())
+		base := activity.BaseActivities{}
+		activities := NewActivities(base, mockClient, artifactStore)
 
 		ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*10)
 		defer cancel()
@@ -473,7 +518,8 @@ func TestGenerateAnswersTemporalIntegration(t *testing.T) {
 	mockClient := newMockLLMClient()
 	mockClient.generateReturnsError = false
 	artifactStore := business.NewInMemoryArtifactStore()
-	activities := NewActivities(mockClient, artifactStore, domain.NewNoOpEventSink())
+	base := activity.BaseActivities{}
+	activities := NewActivities(base, mockClient, artifactStore)
 
 	env.RegisterActivity(activities.GenerateAnswers)
 

@@ -1,7 +1,6 @@
 package domain
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"reflect"
@@ -32,7 +31,7 @@ func TestProperty_GenerateIdempotencyKey_Deterministic(t *testing.T) {
 
 		// Verify hex format
 		for _, r := range key1 {
-			if !((r >= '0' && r <= '9') || (r >= 'a' && r <= 'f')) {
+			if (r < '0' || r > '9') && (r < 'a' || r > 'f') {
 				t.Logf("Invalid hex character %c in key for clientKey=%q, suffix=%q", r, clientKey, suffix)
 				return false
 			}
@@ -559,46 +558,7 @@ func TestProperty_NewLLMUsageEvent_ErrorHandling(t *testing.T) {
 	}
 }
 
-// Property: NoOpEventSink always succeeds
-func TestProperty_NoOpEventSink_AlwaysSucceeds(t *testing.T) {
-	property := func(idempotencyKey, eventType, workflowID, runID, producer string, version, sequence int) bool {
-		envelope := EventEnvelope{
-			IdempotencyKey: idempotencyKey,
-			EventType:      EventType(eventType),
-			Version:        version,
-			OccurredAt:     time.Now(),
-			TenantID:       uuid.New(),
-			WorkflowID:     workflowID,
-			RunID:          runID,
-			Sequence:       sequence,
-			Payload:        json.RawMessage(`{"test": "data"}`),
-			Producer:       producer,
-		}
-
-		sink := &NoOpEventSink{}
-
-		// Should never panic
-		defer func() {
-			if r := recover(); r != nil {
-				t.Logf("NoOpEventSink.Append panicked: %v", r)
-			}
-		}()
-
-		// Should always succeed
-		err := sink.Append(context.Background(), envelope)
-		if err != nil {
-			t.Logf("NoOpEventSink.Append returned error: %v", err)
-			return false
-		}
-
-		return true
-	}
-
-	config := &quick.Config{MaxCount: 50}
-	if err := quick.Check(property, config); err != nil {
-		t.Errorf("Property violation: %v", err)
-	}
-}
+// TestProperty_NoOpEventSink_AlwaysSucceeds has been removed since NoOpEventSink is now in pkg/events package
 
 // Property: Hash collision resistance for idempotency keys
 func TestProperty_IdempotencyKey_CollisionResistance(t *testing.T) {
@@ -643,26 +603,7 @@ func TestProperty_EventType_Stability(t *testing.T) {
 	}
 }
 
-// Property: NewNoOpEventSink always returns valid EventSink
-func TestProperty_NewNoOpEventSink_ValidInterface(t *testing.T) {
-	for i := 0; i < 10; i++ {
-		sink := NewNoOpEventSink()
-
-		// Should never be nil
-		if sink == nil {
-			t.Errorf("NewNoOpEventSink returned nil")
-		}
-
-		// Should implement EventSink interface
-		var _ EventSink = sink
-
-		// Should work correctly
-		err := sink.Append(context.Background(), EventEnvelope{})
-		if err != nil {
-			t.Errorf("NewNoOpEventSink returned sink that fails: %v", err)
-		}
-	}
-}
+// TestProperty_NewNoOpEventSink_ValidInterface has been removed since NoOpEventSink is now in pkg/events package
 
 // Property: Validation should be idempotent (calling multiple times doesn't change result)
 func TestProperty_Validation_Idempotent(t *testing.T) {

@@ -1,5 +1,5 @@
 //nolint:testpackage // Tests need access to unexported functions like trackingEventSink
-package activity
+package generation
 
 import (
 	"context"
@@ -13,15 +13,20 @@ import (
 	"github.com/ahrav/go-judgy/internal/domain"
 	"github.com/ahrav/go-judgy/internal/llm/business"
 	"github.com/ahrav/go-judgy/internal/llm/transport"
+	"github.com/ahrav/go-judgy/pkg/activity"
 )
 
 func TestIdempotencyKeyGeneration(t *testing.T) {
 	t.Run("same input produces same idempotency key", func(t *testing.T) {
-		mockClient := newMockLLMClient()
+		// Use proper EventSink from test helpers
+		eventSink := NewCapturingEventSink()
+		mockClient := NewEnhancedMockClient()
 		mockClient.generateReturnsError = false
+		mockClient.numAnswers = 3
+
+		base := activity.NewBaseActivities(eventSink)
 		artifactStore := business.NewInMemoryArtifactStore()
-		eventSink := &trackingEventSink{events: make([]domain.EventEnvelope, 0)}
-		activities := NewActivities(mockClient, artifactStore, eventSink)
+		activities := NewActivities(base, mockClient, artifactStore)
 
 		ctx := context.Background()
 
@@ -43,28 +48,51 @@ func TestIdempotencyKeyGeneration(t *testing.T) {
 		result1, err1 := activities.GenerateAnswers(ctx, input)
 		require.NoError(t, err1)
 
+		// Capture events from first execution
+		events1 := eventSink.GetEvents()
+		candidateEvents1 := eventSink.GetEventsByType("generation.candidate_produced")
+		usageEvents1 := eventSink.GetEventsByType("generation.llm_usage")
+
+		// Reset for second execution
+		eventSink.Reset()
+
 		result2, err2 := activities.GenerateAnswers(ctx, input)
 		require.NoError(t, err2)
+
+		// Capture events from second execution
+		candidateEvents2 := eventSink.GetEventsByType("generation.candidate_produced")
+		usageEvents2 := eventSink.GetEventsByType("generation.llm_usage")
 
 		// Should produce same ClientIdemKey
 		assert.Equal(t, result1.ClientIdemKey, result2.ClientIdemKey,
 			"Same input should produce same idempotency key")
 
-		// Event idempotency keys should also match
-		events1 := eventSink.getEventsByType("LLMUsage")
-		events2 := eventSink.getEventsByType("LLMUsage")
+		// Event counts should be correct
+		assert.Len(t, candidateEvents1, 3, "Should emit 3 CandidateProduced events")
+		assert.Len(t, usageEvents1, 1, "Should emit 1 LLMUsage event")
+		assert.Len(t, candidateEvents2, 3, "Second run should also emit 3 CandidateProduced events")
+		assert.Len(t, usageEvents2, 1, "Second run should also emit 1 LLMUsage event")
 
-		if len(events1) >= 1 && len(events2) >= 2 {
-			assert.Equal(t, events1[0].IdempotencyKey, events2[1].IdempotencyKey,
-				"Same input should produce same event idempotency keys")
+		// Event idempotency keys should match
+		for i := 0; i < 3; i++ {
+			assert.Equal(t, candidateEvents1[i].IdempotencyKey, candidateEvents2[i].IdempotencyKey,
+				"CandidateProduced event %d should have same idempotency key", i)
 		}
+		assert.Equal(t, usageEvents1[0].IdempotencyKey, usageEvents2[0].IdempotencyKey,
+			"LLMUsage events should have same idempotency key")
+
+		// Verify total event count
+		assert.Len(t, events1, 4, "First run should emit 4 events total")
 	})
 
 	t.Run("different inputs produce different idempotency keys", func(t *testing.T) {
-		mockClient := newMockLLMClient()
+		eventSink := NewCapturingEventSink()
+		mockClient := NewEnhancedMockClient()
 		mockClient.generateReturnsError = false
+
+		base := activity.NewBaseActivities(eventSink)
 		artifactStore := business.NewInMemoryArtifactStore()
-		activities := NewActivities(mockClient, artifactStore, domain.NewNoOpEventSink())
+		activities := NewActivities(base, mockClient, artifactStore)
 
 		ctx := context.Background()
 
@@ -171,11 +199,14 @@ func TestIdempotencyKeyGeneration(t *testing.T) {
 }
 
 func TestArtifactIdempotency(t *testing.T) {
-	t.Run("artifact storage works correctly", func(t *testing.T) {
-		mockClient := newMockLLMClient()
+	t.Run("artifact storage produces deterministic keys", func(t *testing.T) {
+		eventSink := NewCapturingEventSink()
+		mockClient := NewEnhancedMockClient()
 		mockClient.generateReturnsError = false
+
+		base := activity.NewBaseActivities(eventSink)
 		artifactStore := business.NewInMemoryArtifactStore()
-		activities := NewActivities(mockClient, artifactStore, domain.NewNoOpEventSink())
+		activities := NewActivities(base, mockClient, artifactStore)
 
 		answer := domain.Answer{
 			ID: uuid.New().String(),
@@ -187,20 +218,20 @@ func TestArtifactIdempotency(t *testing.T) {
 		workflowID := "test-workflow-123"
 
 		// Store content successfully
-		ref1, err1 := activities.storeAnswerContent(context.Background(),
-			answer, workflowID, nil)
+		ref1, err1 := activities.StoreAnswerContent(context.Background(),
+			answer, workflowID, "test-tenant", "test-idem-key", 0)
 		require.NoError(t, err1)
 		assert.NotEmpty(t, ref1.Key, "artifact key should be generated")
 		assert.Equal(t, domain.ArtifactAnswer, ref1.Kind, "artifact should be answer type")
 
-		ref2, err2 := activities.storeAnswerContent(context.Background(),
-			answer, workflowID, nil)
+		ref2, err2 := activities.StoreAnswerContent(context.Background(),
+			answer, workflowID, "test-tenant", "test-idem-key", 0)
 		require.NoError(t, err2)
 		assert.NotEmpty(t, ref2.Key, "artifact key should be generated")
 
-		// Artifact keys should be unique (contain UUIDs for uniqueness)
-		assert.NotEqual(t, ref1.Key, ref2.Key,
-			"Different storage operations should produce unique artifact keys")
+		// Artifact keys should be idempotent - same inputs produce same key
+		assert.Equal(t, ref1.Key, ref2.Key,
+			"Same inputs should produce identical artifact keys for idempotency")
 
 		// Both artifacts should be retrievable
 		content1, err := artifactStore.Get(context.Background(), ref1)
@@ -212,11 +243,14 @@ func TestArtifactIdempotency(t *testing.T) {
 		assert.Contains(t, content2, "This is the answer content")
 	})
 
-	t.Run("different content produces different artifact keys", func(t *testing.T) {
-		mockClient := newMockLLMClient()
+	t.Run("different answers produce different artifact keys", func(t *testing.T) {
+		eventSink := NewCapturingEventSink()
+		mockClient := NewEnhancedMockClient()
 		mockClient.generateReturnsError = false
+
+		base := activity.NewBaseActivities(eventSink)
 		artifactStore := business.NewInMemoryArtifactStore()
-		activities := NewActivities(mockClient, artifactStore, domain.NewNoOpEventSink())
+		activities := NewActivities(base, mockClient, artifactStore)
 
 		answer1 := domain.Answer{
 			ID: uuid.New().String(),
@@ -234,12 +268,12 @@ func TestArtifactIdempotency(t *testing.T) {
 
 		workflowID := "test-workflow-123"
 
-		ref1, err1 := activities.storeAnswerContent(context.Background(),
-			answer1, workflowID, nil)
+		ref1, err1 := activities.StoreAnswerContent(context.Background(),
+			answer1, workflowID, "test-tenant", "test-idem-key-1", 0)
 		require.NoError(t, err1)
 
-		ref2, err2 := activities.storeAnswerContent(context.Background(),
-			answer2, workflowID, nil)
+		ref2, err2 := activities.StoreAnswerContent(context.Background(),
+			answer2, workflowID, "test-tenant", "test-idem-key-2", 1)
 		require.NoError(t, err2)
 
 		// Should produce different artifact keys
@@ -248,22 +282,9 @@ func TestArtifactIdempotency(t *testing.T) {
 	})
 }
 
-// Test helper: event sink that tracks emitted events
-type trackingEventSink struct {
-	events []domain.EventEnvelope
-}
-
-func (t *trackingEventSink) Append(ctx context.Context, event domain.EventEnvelope) error {
-	t.events = append(t.events, event)
-	return nil
-}
-
-func (t *trackingEventSink) getEventsByType(eventType string) []domain.EventEnvelope {
-	var filtered []domain.EventEnvelope
-	for _, e := range t.events {
-		if string(e.EventType) == eventType {
-			filtered = append(filtered, e)
-		}
-	}
-	return filtered
-}
+// Note: trackingEventSink has been replaced with the more comprehensive
+// CapturingEventSink from test_helpers.go which provides:
+// - Thread-safe event collection
+// - Idempotency key tracking
+// - Failure simulation for resilience testing
+// - Better assertion helpers
