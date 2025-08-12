@@ -8,6 +8,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/ahrav/go-judgy/internal/domain"
@@ -23,91 +24,93 @@ import (
 // This prevents probe leakage and ensures accurate concurrency control during
 // recovery testing.
 func TestCircuitBreaker_ProbeCounterManagement(t *testing.T) {
-	ctx := context.Background()
+	synctest.Run(func() {
+		ctx := context.Background()
 
-	config := circuitbreaker.Config{
-		FailureThreshold: 2,
-		SuccessThreshold: 2,
-		HalfOpenProbes:   3,
-		OpenTimeout:      10 * time.Millisecond,
-	}
-
-	req := &transport.Request{
-		Operation: transport.OpGeneration,
-		Provider:  "test",
-		Model:     "test-model",
-		Question:  "test question",
-	}
-
-	// First, trigger failures to open circuit
-	failingHandler := transport.HandlerFunc(func(_ context.Context, _ *transport.Request) (*transport.Response, error) {
-		return nil, &llmerrors.ProviderError{
-			Provider:   "test",
-			StatusCode: 500,
-			Message:    "server error",
-			Type:       llmerrors.ErrorTypeProvider,
+		config := circuitbreaker.Config{
+			FailureThreshold: 2,
+			SuccessThreshold: 2,
+			HalfOpenProbes:   3,
+			OpenTimeout:      10 * time.Millisecond,
 		}
-	})
 
-	cbMiddleware, _ := circuitbreaker.NewCircuitBreakerMiddlewareWithRedis(config, nil)
-	failingCBHandler := cbMiddleware(failingHandler)
-
-	// Trigger failures to open circuit
-	for i := 0; i < 3; i++ {
-		_, err := failingCBHandler.Handle(ctx, req)
-		if err == nil {
-			t.Fatal("expected failure to open circuit")
+		req := &transport.Request{
+			Operation: transport.OpGeneration,
+			Provider:  "test",
+			Model:     "test-model",
+			Question:  "test question",
 		}
-	}
 
-	// Wait for circuit to allow half-open transition
-	time.Sleep(15 * time.Millisecond)
+		// First, trigger failures to open circuit
+		failingHandler := transport.HandlerFunc(func(_ context.Context, _ *transport.Request) (*transport.Response, error) {
+			return nil, &llmerrors.ProviderError{
+				Provider:   "test",
+				StatusCode: 500,
+				Message:    "server error",
+				Type:       llmerrors.ErrorTypeProvider,
+			}
+		})
 
-	// Now test multiple concurrent half-open probes
-	successHandler := transport.HandlerFunc(func(_ context.Context, _ *transport.Request) (*transport.Response, error) {
-		// Simulate slow request to test concurrent probe management
-		time.Sleep(5 * time.Millisecond)
-		return &transport.Response{
-			Content:      "success",
-			FinishReason: domain.FinishStop,
-			Usage:        transport.NormalizedUsage{TotalTokens: 10},
-		}, nil
-	})
+		cbMiddleware, _ := circuitbreaker.NewCircuitBreakerMiddlewareWithRedis(config, nil)
+		failingCBHandler := cbMiddleware(failingHandler)
 
-	successCBHandler := cbMiddleware(successHandler)
-
-	// Launch multiple concurrent requests
-	results := make(chan error, 5)
-	for i := 0; i < 5; i++ {
-		go func() {
-			_, err := successCBHandler.Handle(ctx, req)
-			results <- err
-		}()
-	}
-
-	// Collect results
-	var successCount, limitErrors int
-	for i := 0; i < 5; i++ {
-		err := <-results
-		if err == nil {
-			successCount++
-		} else {
-			var perr *llmerrors.ProviderError
-			if errors.As(err, &perr) && perr.Code == "CIRCUIT_HALF_OPEN_LIMIT" {
-				limitErrors++
+		// Trigger failures to open circuit
+		for i := 0; i < 3; i++ {
+			_, err := failingCBHandler.Handle(ctx, req)
+			if err == nil {
+				t.Fatal("expected failure to open circuit")
 			}
 		}
-	}
 
-	// Should have limited successful probes (≤ HalfOpenProbes)
-	if successCount > config.HalfOpenProbes {
-		t.Errorf("expected max %d successful probes, got %d", config.HalfOpenProbes, successCount)
-	}
+		// Wait for circuit to allow half-open transition
+		time.Sleep(15 * time.Millisecond)
 
-	// Should have some requests rejected due to probe limit
-	if limitErrors == 0 && successCount == 5 {
-		t.Error("expected some requests to be rejected due to probe limit")
-	}
+		// Now test multiple concurrent half-open probes
+		successHandler := transport.HandlerFunc(func(_ context.Context, _ *transport.Request) (*transport.Response, error) {
+			// Simulate slow request to test concurrent probe management
+			time.Sleep(5 * time.Millisecond)
+			return &transport.Response{
+				Content:      "success",
+				FinishReason: domain.FinishStop,
+				Usage:        transport.NormalizedUsage{TotalTokens: 10},
+			}, nil
+		})
+
+		successCBHandler := cbMiddleware(successHandler)
+
+		// Launch multiple concurrent requests
+		results := make(chan error, 5)
+		for i := 0; i < 5; i++ {
+			go func() {
+				_, err := successCBHandler.Handle(ctx, req)
+				results <- err
+			}()
+		}
+
+		// Collect results
+		var successCount, limitErrors int
+		for i := 0; i < 5; i++ {
+			err := <-results
+			if err == nil {
+				successCount++
+			} else {
+				var perr *llmerrors.ProviderError
+				if errors.As(err, &perr) && perr.Code == "CIRCUIT_HALF_OPEN_LIMIT" {
+					limitErrors++
+				}
+			}
+		}
+
+		// Should have limited successful probes (≤ HalfOpenProbes)
+		if successCount > config.HalfOpenProbes {
+			t.Errorf("expected max %d successful probes, got %d", config.HalfOpenProbes, successCount)
+		}
+
+		// Should have some requests rejected due to probe limit
+		if limitErrors == 0 && successCount == 5 {
+			t.Error("expected some requests to be rejected due to probe limit")
+		}
+	})
 }
 
 // TestCircuitBreaker_StateMachineTimeConversion validates that the circuit
@@ -115,88 +118,90 @@ func TestCircuitBreaker_ProbeCounterManagement(t *testing.T) {
 // open timeout period has elapsed.
 // This ensures proper state transitions from the open to half-open state.
 func TestCircuitBreaker_StateMachineTimeConversion(t *testing.T) {
-	ctx := context.Background()
+	synctest.Run(func() {
+		ctx := context.Background()
 
-	config := circuitbreaker.Config{
-		FailureThreshold: 1,
-		SuccessThreshold: 1,
-		HalfOpenProbes:   1,
-		OpenTimeout:      50 * time.Millisecond,
-	}
+		config := circuitbreaker.Config{
+			FailureThreshold: 1,
+			SuccessThreshold: 1,
+			HalfOpenProbes:   1,
+			OpenTimeout:      50 * time.Millisecond,
+		}
 
-	failureHandler := transport.HandlerFunc(func(_ context.Context, _ *transport.Request) (*transport.Response, error) {
-		return nil, &llmerrors.ProviderError{
-			Provider:   "test",
-			StatusCode: 500,
-			Message:    "server error",
-			Type:       llmerrors.ErrorTypeProvider,
+		failureHandler := transport.HandlerFunc(func(_ context.Context, _ *transport.Request) (*transport.Response, error) {
+			return nil, &llmerrors.ProviderError{
+				Provider:   "test",
+				StatusCode: 500,
+				Message:    "server error",
+				Type:       llmerrors.ErrorTypeProvider,
+			}
+		})
+
+		cbMiddleware, _ := circuitbreaker.NewCircuitBreakerMiddlewareWithRedis(config, nil)
+		cbHandler := cbMiddleware(failureHandler)
+
+		req := &transport.Request{
+			Operation: transport.OpGeneration,
+			Provider:  "test",
+			Model:     "test-model",
+			Question:  "test question",
+		}
+
+		// Record start time for verification
+		startTime := time.Now()
+
+		// Trigger failure to open circuit
+		_, err := cbHandler.Handle(ctx, req)
+		if err == nil {
+			t.Fatal("expected failure to open circuit")
+		}
+
+		// Verify circuit is open immediately after failure
+		_, err = cbHandler.Handle(ctx, req)
+		if err == nil {
+			t.Fatal("expected circuit to be open")
+		}
+		var perr *llmerrors.ProviderError
+		if !errors.As(err, &perr) || perr.Code != "CIRCUIT_OPEN" {
+			t.Errorf("expected CIRCUIT_OPEN error, got: %v", err)
+		}
+
+		// Wait for less than the open timeout
+		time.Sleep(25 * time.Millisecond)
+
+		// Circuit should still be open
+		_, err = cbHandler.Handle(ctx, req)
+		if err == nil {
+			t.Fatal("expected circuit to still be open")
+		}
+
+		// Wait for the full timeout period
+		elapsedSinceStart := time.Since(startTime)
+		remainingWait := config.OpenTimeout - elapsedSinceStart
+		if remainingWait > 0 {
+			time.Sleep(remainingWait + 10*time.Millisecond) // Add buffer
+		}
+
+		// Now create a success handler and verify circuit transitions to half-open
+		successHandler := transport.HandlerFunc(func(_ context.Context, _ *transport.Request) (*transport.Response, error) {
+			return &transport.Response{
+				Content:      "success",
+				FinishReason: domain.FinishStop,
+				Usage:        transport.NormalizedUsage{TotalTokens: 10},
+			}, nil
+		})
+
+		successCBHandler := cbMiddleware(successHandler)
+
+		// This should succeed if time conversion works correctly
+		resp, err := successCBHandler.Handle(ctx, req)
+		if err != nil {
+			t.Fatalf("expected circuit to allow half-open probe after timeout, got error: %v", err)
+		}
+		if resp.Content != "success" {
+			t.Errorf("expected success response, got: %s", resp.Content)
 		}
 	})
-
-	cbMiddleware, _ := circuitbreaker.NewCircuitBreakerMiddlewareWithRedis(config, nil)
-	cbHandler := cbMiddleware(failureHandler)
-
-	req := &transport.Request{
-		Operation: transport.OpGeneration,
-		Provider:  "test",
-		Model:     "test-model",
-		Question:  "test question",
-	}
-
-	// Record start time for verification
-	startTime := time.Now()
-
-	// Trigger failure to open circuit
-	_, err := cbHandler.Handle(ctx, req)
-	if err == nil {
-		t.Fatal("expected failure to open circuit")
-	}
-
-	// Verify circuit is open immediately after failure
-	_, err = cbHandler.Handle(ctx, req)
-	if err == nil {
-		t.Fatal("expected circuit to be open")
-	}
-	var perr *llmerrors.ProviderError
-	if !errors.As(err, &perr) || perr.Code != "CIRCUIT_OPEN" {
-		t.Errorf("expected CIRCUIT_OPEN error, got: %v", err)
-	}
-
-	// Wait for less than the open timeout
-	time.Sleep(25 * time.Millisecond)
-
-	// Circuit should still be open
-	_, err = cbHandler.Handle(ctx, req)
-	if err == nil {
-		t.Fatal("expected circuit to still be open")
-	}
-
-	// Wait for the full timeout period
-	elapsedSinceStart := time.Since(startTime)
-	remainingWait := config.OpenTimeout - elapsedSinceStart
-	if remainingWait > 0 {
-		time.Sleep(remainingWait + 10*time.Millisecond) // Add buffer
-	}
-
-	// Now create a success handler and verify circuit transitions to half-open
-	successHandler := transport.HandlerFunc(func(_ context.Context, _ *transport.Request) (*transport.Response, error) {
-		return &transport.Response{
-			Content:      "success",
-			FinishReason: domain.FinishStop,
-			Usage:        transport.NormalizedUsage{TotalTokens: 10},
-		}, nil
-	})
-
-	successCBHandler := cbMiddleware(successHandler)
-
-	// This should succeed if time conversion works correctly
-	resp, err := successCBHandler.Handle(ctx, req)
-	if err != nil {
-		t.Fatalf("expected circuit to allow half-open probe after timeout, got error: %v", err)
-	}
-	if resp.Content != "success" {
-		t.Errorf("expected success response, got: %s", resp.Content)
-	}
 }
 
 // TestCircuitBreaker_RetryInteraction ensures that the circuit breaker

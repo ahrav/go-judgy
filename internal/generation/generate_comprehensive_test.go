@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/stretchr/testify/assert"
@@ -213,6 +214,7 @@ func TestTenantTeamPropagation(t *testing.T) {
 // This addresses issue #7: heartbeat/timeout paths not tested.
 func TestHeartbeatAndTimeout(t *testing.T) {
 	t.Run("heartbeats prevent timeout during long operations", func(t *testing.T) {
+		synctest.Run(func() {
 		// Create Temporal test environment
 		testSuite := &testsuite.WorkflowTestSuite{}
 		env := testSuite.NewTestActivityEnvironment()
@@ -240,41 +242,44 @@ func TestHeartbeatAndTimeout(t *testing.T) {
 		// Should complete successfully despite taking longer than heartbeat timeout
 		require.NoError(t, err, "Activity should complete with heartbeats")
 
-		var result *domain.GenerateAnswersOutput
-		err = val.Get(&result)
-		require.NoError(t, err)
-		require.NotNil(t, result)
+			var result *domain.GenerateAnswersOutput
+			err = val.Get(&result)
+			require.NoError(t, err)
+			require.NotNil(t, result)
+		})
 	})
 
 	t.Run("timeout occurs without heartbeats", func(t *testing.T) {
-		// Create a mock that blocks forever
-		blockingClient := &blockingMockClient{
-			blockChan: make(chan struct{}),
-		}
+		synctest.Run(func() {
+			// Create a mock that blocks forever
+			blockingClient := &blockingMockClient{
+				blockChan: make(chan struct{}),
+			}
 
-		testSuite := &testsuite.WorkflowTestSuite{}
-		env := testSuite.NewTestActivityEnvironment()
-		// Heartbeat timeout would be configured in workflow activity options
+			testSuite := &testsuite.WorkflowTestSuite{}
+			env := testSuite.NewTestActivityEnvironment()
+			// Heartbeat timeout would be configured in workflow activity options
 
-		eventSink := NewCapturingEventSink()
-		base := activity.NewBaseActivities(eventSink)
-		artifactStore := business.NewInMemoryArtifactStore()
-		activities := NewActivities(base, blockingClient, artifactStore)
+			eventSink := NewCapturingEventSink()
+			base := activity.NewBaseActivities(eventSink)
+			artifactStore := business.NewInMemoryArtifactStore()
+			activities := NewActivities(base, blockingClient, artifactStore)
 
-		env.RegisterActivity(activities.GenerateAnswers)
+			env.RegisterActivity(activities.GenerateAnswers)
 
-		input := createValidGenerateAnswersInput()
+			input := createValidGenerateAnswersInput()
 
-		// This should timeout
-		_, err := env.ExecuteActivity(activities.GenerateAnswers, input)
+			// This should timeout
+			_, err := env.ExecuteActivity(activities.GenerateAnswers, input)
 
-		// Should get a timeout error
-		assert.Error(t, err, "Should timeout without heartbeats")
-		var timeoutErr *temporal.TimeoutError
-		assert.True(t, errors.As(err, &timeoutErr), "Should be a timeout error")
+			// Should get a timeout error
+			assert.Error(t, err, "Should timeout without heartbeats")
+			var timeoutErr *temporal.TimeoutError
+			assert.True(t, errors.As(err, &timeoutErr), "Should be a timeout error")
 
-		// Clean up
-		close(blockingClient.blockChan)
+			// Clean up
+			close(blockingClient.blockChan)
+		})
 	})
 }
 

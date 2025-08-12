@@ -48,7 +48,7 @@ build: ## Build all binaries (worker and cli)
 .PHONY: test
 test: ## Run unit tests (excludes integration, fuzz, and benchmark tests)
 	@echo "Running unit tests..."
-	@$(GOTEST) $(TEST_FLAGS) -short -tags '!integration' -skip 'Fuzz' ./...
+	@GOEXPERIMENT=synctest $(GOTEST) $(TEST_FLAGS) -short -tags '!integration' -run '^Test[^F]' ./...
 
 .PHONY: test-race
 test-race: ## Run unit tests with race detection (excludes integration and fuzz tests)
@@ -77,6 +77,21 @@ test-all: ## Run all tests (unit + integration)
 lint: ## Run golangci-lint
 	@echo "Running linter..."
 	@$(GOLANGCI_LINT) run ./...
+
+.PHONY: lint-synctest-build
+lint-synctest-build: ## Build standalone synctest linter
+	@echo "Building standalone synctest linter..."
+	@$(GOBUILD) -o $(BINARY_DIR)/synctest-linter ./cmd/synctest-linter
+	@echo "Synctest linter built successfully"
+
+.PHONY: lint-synctest
+lint-synctest: ## Run synctest linter to check for time.Sleep without synctest
+	@echo "Running synctest linter..."
+	@if [ ! -f $(BINARY_DIR)/synctest-linter ]; then \
+		echo "Synctest linter not found. Building it first..."; \
+		make lint-synctest-build; \
+	fi
+	@$(BINARY_DIR)/synctest-linter .
 
 .PHONY: pre-commit
 pre-commit: fmt vet lint test-race ## Run all pre-commit checks (tests with race detection, linting)
