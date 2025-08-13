@@ -41,7 +41,7 @@ func TestVerdict_Validate(t *testing.T) {
 		Value:      0.8,
 		Confidence: 0.9,
 		ScoreEvidence: ScoreEvidence{
-			ReasonRef: ArtifactRef{
+			ReasonRef: &ArtifactRef{
 				Key:  "scores/reasoning-good.txt",
 				Size: 4,
 				Kind: "judge_rationale",
@@ -490,7 +490,7 @@ func TestVerdict_WithWinnerAnswer(t *testing.T) {
 				AnswerID: "123e4567-e89b-12d3-a456-426614174001",
 				Value:    0.9,
 				ScoreEvidence: ScoreEvidence{
-					ReasonRef: ArtifactRef{
+					ReasonRef: &ArtifactRef{
 						Key:  "scores/reasoning-1.txt",
 						Size: 4,
 						Kind: ArtifactJudgeRationale,
@@ -509,7 +509,7 @@ func TestVerdict_WithWinnerAnswer(t *testing.T) {
 				AnswerID: "123e4567-e89b-12d3-a456-426614174002",
 				Value:    0.8,
 				ScoreEvidence: ScoreEvidence{
-					ReasonRef: ArtifactRef{
+					ReasonRef: &ArtifactRef{
 						Key:  "scores/reasoning-2.txt",
 						Size: 4,
 						Kind: ArtifactJudgeRationale,
@@ -626,7 +626,7 @@ func TestVerdict_TimeValidation(t *testing.T) {
 		Value:      0.8,
 		Confidence: 0.9,
 		ScoreEvidence: ScoreEvidence{
-			ReasonRef: ArtifactRef{
+			ReasonRef: &ArtifactRef{
 				Key:  "scores/reasoning-good.txt",
 				Size: 4,
 				Kind: "judge_rationale",
@@ -692,7 +692,7 @@ func TestVerdict_UUIDValidation(t *testing.T) {
 		AnswerID: "123e4567-e89b-12d3-a456-426614174000",
 		Value:    0.8,
 		ScoreEvidence: ScoreEvidence{
-			ReasonRef: ArtifactRef{
+			ReasonRef: &ArtifactRef{
 				Key:  "scores/reasoning.txt",
 				Size: 4,
 				Kind: "judge_rationale",
