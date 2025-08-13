@@ -5,6 +5,7 @@ import (
 	sdkworker "go.temporal.io/sdk/worker"
 
 	"github.com/ahrav/go-judgy/internal/aggregation"
+	"github.com/ahrav/go-judgy/internal/domain"
 	"github.com/ahrav/go-judgy/internal/generation"
 	"github.com/ahrav/go-judgy/internal/llm"
 	"github.com/ahrav/go-judgy/internal/scoring"
@@ -29,7 +30,9 @@ func RegisterAll(w sdkworker.Worker, llmClient llm.Client) {
 
 	// Register domain-specific activities.
 	generationActivities := generation.NewActivities(base, llmClient, artifactStore)
-	scoringActivities := scoring.NewActivities(base, llmClient)
+	scoringActivities := scoring.NewActivities(
+		base, llmClient, artifactStore, domain.DefaultBlobThresholdBytes,
+	)
 	aggregationActivities := aggregation.NewActivities(base)
 
 	// Register workflow.

@@ -280,7 +280,7 @@ func TestClient_Score(t *testing.T) {
 		// Simulate OpenAI response with scoring content
 		response := `{
 			"id": "chatcmpl-score",
-			"object": "chat.completion", 
+			"object": "chat.completion",
 			"created": 1234567890,
 			"model": "gpt-3.5-turbo",
 			"choices": [{
@@ -385,7 +385,7 @@ func TestClient_Score(t *testing.T) {
 				for _, score := range output.Scores {
 					assert.Greater(t, score.Value, float64(0))
 					assert.Greater(t, score.Confidence, float64(0))
-					assert.NotEmpty(t, score.ReasonRef.Key) // ReasonRef instead of Reasoning
+					assert.NotEmpty(t, score.InlineReasoning) // Transport layer now uses InlineReasoning
 				}
 			},
 		},
