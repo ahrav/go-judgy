@@ -117,6 +117,8 @@ jobs:
         with:
           version: latest
           args: --timeout=5m
+        env:
+          GOEXPERIMENT: synctest
 
   fuzz:
     name: Fuzz Testing
