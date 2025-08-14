@@ -77,6 +77,12 @@ linters:
             - github.com/google/uuid
             - github.com/redis/go-redis/v9
             - golang.org/x/time/rate
+        tools:
+          files:
+            - "cmd/synctest-linter/**"
+          allow:
+            - $gostd
+            - github.com/ahrav/go-judgy
 
     # Documentation enforcement
     godot:
