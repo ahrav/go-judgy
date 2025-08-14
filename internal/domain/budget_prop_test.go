@@ -376,14 +376,14 @@ func TestBudgetExceededError_Error_Format_Property(t *testing.T) {
 
 // Fuzz-like property test for budget validation edge cases
 func TestBudgetLimits_Validate_RandomValues_Property(t *testing.T) {
-	rand.Seed(42) // For reproducibility
+	rng := rand.New(rand.NewSource(42)) // For reproducibility
 
 	for i := 0; i < 1000; i++ {
 		// Generate random values around the boundaries
-		tokens := generateBoundaryValue(100, rand.Intn(3))
-		calls := generateBoundaryValue(1, rand.Intn(3))
-		cents := Cents(generateBoundaryValue(1, rand.Intn(3)))
-		timeout := generateBoundaryValue(30, rand.Intn(3))
+		tokens := generateBoundaryValue(100, rng.Intn(3))
+		calls := generateBoundaryValue(1, rng.Intn(3))
+		cents := Cents(generateBoundaryValue(1, rng.Intn(3)))
+		timeout := generateBoundaryValue(30, rng.Intn(3))
 
 		limits := BudgetLimits{
 			MaxTotalTokens: tokens,

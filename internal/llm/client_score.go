@@ -18,7 +18,7 @@ import (
 const (
 	DefaultMaxTokens          = 1000
 	DefaultScoringTemperature = 0.1
-	// milliToCentsConversionFactor converts milli-cents to cents (divide by 1000).
+	// MilliToCentsConversionFactor converts milli-cents to cents (divide by 1000).
 	milliToCentsConversionFactor = 1000
 )
 
@@ -109,7 +109,7 @@ func (c *client) createScoreWithDomainValidator(
 	content string,
 	validator domain.ScoreValidator,
 ) (*domain.Score, error) {
-	normalizedJSON, repaired, err := validator.Validate([]byte(content))
+	normalizedJSON, repaired, err := validator.Validate([]byte(content)) //nolint:staticcheck // TODO: Add repair tracking implementation
 	if err != nil {
 		return transport.CreateInvalidScore(answerID, err), nil
 	}

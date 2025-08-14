@@ -343,7 +343,7 @@ func TestNewPromptSpec(t *testing.T) {
 			}
 
 			// Test that variables are cloned, not aliased
-			if tt.variables != nil && len(tt.variables) > 0 {
+			if len(tt.variables) > 0 {
 				// Modify original map
 				for k := range tt.variables {
 					tt.variables[k] = "modified"

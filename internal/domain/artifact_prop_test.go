@@ -287,6 +287,7 @@ func TestArtifactRef_EquivalenceRelation(t *testing.T) {
 	// Property: Equality is an equivalence relation (reflexive, symmetric, transitive)
 	property := func(ref1, ref2, ref3 ArtifactRef) bool {
 		// Reflexive: ref == ref
+		//nolint:staticcheck // Property test for reflexivity of equality
 		if ref1 != ref1 {
 			return false
 		}

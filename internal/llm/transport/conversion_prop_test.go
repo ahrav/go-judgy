@@ -449,11 +449,7 @@ func TestGeneratedIDs_AreValidUUIDs(t *testing.T) {
 
 		// Test ExtractTraceID generation
 		traceID := ExtractTraceID(context.Background())
-		if !isValidUUID(traceID) {
-			return false
-		}
-
-		return true
+		return isValidUUID(traceID)
 	}
 
 	// Run multiple times to ensure consistency
@@ -558,7 +554,7 @@ func TestExtractAnswerContent_AnswerCounts(t *testing.T) {
 			return result == ""
 		} else {
 			// Should only use the first answer
-			expectedContent := fmt.Sprintf("content for key-0")
+			expectedContent := "content for key-0"
 			return result == expectedContent
 		}
 	}

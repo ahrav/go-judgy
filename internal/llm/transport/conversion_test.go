@@ -11,6 +11,17 @@ import (
 	"github.com/ahrav/go-judgy/internal/domain"
 )
 
+// Context key types for testing.
+type (
+	testKeyType   struct{}
+	testTraceType struct{}
+)
+
+var (
+	testKey   = testKeyType{}
+	testTrace = testTraceType{}
+)
+
 // MockArtifactStore provides a test implementation of ArtifactStore interface.
 type MockArtifactStore struct {
 	GetFunc func(ctx context.Context, ref domain.ArtifactRef) (string, error)
@@ -856,7 +867,7 @@ func TestExtractTenantID(t *testing.T) {
 		},
 		{
 			name: "context with values",
-			ctx:  context.WithValue(context.Background(), "key", "value"),
+			ctx:  context.WithValue(context.Background(), testKey, "value"),
 			want: "default",
 		},
 	}
@@ -894,7 +905,7 @@ func TestExtractTraceID(t *testing.T) {
 		},
 		{
 			name: "context with values",
-			ctx:  context.WithValue(context.Background(), "trace", "existing"),
+			ctx:  context.WithValue(context.Background(), testTrace, "existing"),
 		},
 	}
 

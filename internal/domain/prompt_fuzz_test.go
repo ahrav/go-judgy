@@ -50,13 +50,11 @@ func FuzzNewPromptSpec(f *testing.F) {
 			t.Errorf("Template not preserved: got %q, want %q", spec.Template, template)
 		}
 
-		// 2. Variables should be preserved exactly (if not nil)
-		if variables != nil {
-			if spec.Variables == nil {
-				t.Errorf("Variables should not be nil when input was not nil")
-			} else if spec.Variables["key"] != varValue {
-				t.Errorf("Variable value not preserved: got %q, want %q", spec.Variables["key"], varValue)
-			}
+		// 2. Variables should be preserved exactly
+		if spec.Variables == nil {
+			t.Errorf("Variables should not be nil when input was not nil")
+		} else if spec.Variables["key"] != varValue {
+			t.Errorf("Variable value not preserved: got %q, want %q", spec.Variables["key"], varValue)
 		}
 
 		// 3. Hash should be consistent with rendered content
@@ -253,7 +251,7 @@ func FuzzNewPromptSpec_UTF8(f *testing.F) {
 		// Hash should always be valid hex
 		if spec.Hash != "" {
 			for _, r := range spec.Hash {
-				if !((r >= '0' && r <= '9') || (r >= 'a' && r <= 'f')) {
+				if (r < '0' || r > '9') && (r < 'a' || r > 'f') {
 					t.Errorf("Hash contains invalid hex character: %q in %q", r, spec.Hash)
 				}
 			}

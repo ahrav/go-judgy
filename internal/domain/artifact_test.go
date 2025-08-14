@@ -569,6 +569,7 @@ func ExampleArtifactRef_IsZero() {
 	var ref ArtifactRef
 	if ref.IsZero() {
 		// Handle empty reference
+		_ = "empty" // Use the result
 	}
 	// Output:
 }
