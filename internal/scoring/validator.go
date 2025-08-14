@@ -14,6 +14,9 @@ import (
 	"github.com/ahrav/go-judgy/internal/domain"
 )
 
+// minReasoningLength defines the minimum character count for reasoning text.
+const minReasoningLength = 10
+
 // ScoreSchema defines the expected JSON structure for LLM judge responses.
 // This schema enforces strict validation with business rules to ensure
 // consistent and reliable scoring data across all judge models.
@@ -128,8 +131,8 @@ func (v *scoringValidator) validateSchema(schema *ScoreSchema) error {
 
 	// Validate reasoning length
 	reasoning := strings.TrimSpace(schema.Reasoning)
-	if len(reasoning) < 10 {
-		return fmt.Errorf("reasoning too short: %d characters (minimum 10)", len(reasoning))
+	if len(reasoning) < minReasoningLength {
+		return fmt.Errorf("reasoning too short: %d characters (minimum %d)", len(reasoning), minReasoningLength)
 	}
 
 	// Validate confidence if provided
