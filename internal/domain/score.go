@@ -123,7 +123,8 @@ const (
 )
 
 // DefaultDimensionWeights returns standard weights for computing overall scores.
-// Returns a fresh copy to prevent mutation. These can be overridden per evaluation configuration.
+// Returns a fresh copy to prevent mutation.
+// These can be overridden per evaluation configuration.
 func DefaultDimensionWeights() map[Dimension]float64 {
 	return map[Dimension]float64{
 		DimCorrectness:  CorrectnessWeight,
@@ -247,7 +248,8 @@ func MakeScore(
 		},
 	}
 
-	// For valid scores, validate reasoning data constraint: exactly one of ReasonRef or InlineReasoning must be populated.
+	// For valid scores, validate reasoning data constraint:
+	// exactly one of ReasonRef or InlineReasoning must be populated.
 	hasReasonRef := !evidence.ReasonRef.IsZero()
 	hasInlineReasoning := evidence.InlineReasoning != ""
 
@@ -280,18 +282,17 @@ func (s *Score) Validate() error {
 	// This accommodates scores that failed during the scoring process.
 	if !s.Valid {
 		// For invalid scores, allow empty reasoning but validate ReasonRef if present.
-		if !s.ReasonRef.IsZero() {
-			if s.ReasonRef.Kind != ArtifactJudgeRationale {
-				return ErrInvalidReasonKind
-			}
-			if err := s.ReasonRef.Validate(); err != nil {
-				return err
-			}
+		if s.ReasonRef.IsZero() {
+			return nil
 		}
-		return nil
+		if s.ReasonRef.Kind != ArtifactJudgeRationale {
+			return ErrInvalidReasonKind
+		}
+		return s.ReasonRef.Validate()
 	}
 
-	// For valid scores, enforce reasoning data constraint: exactly one of ReasonRef or InlineReasoning must be populated.
+	// For valid scores, enforce reasoning data constraint:
+	// exactly one of ReasonRef or InlineReasoning must be populated.
 	hasReasonRef := !s.ReasonRef.IsZero()
 	hasInlineReasoning := s.InlineReasoning != ""
 

@@ -2,6 +2,8 @@ package domain
 
 import "fmt"
 
+const unknownBudgetType = "unknown"
+
 // BudgetType represents the type of budget limit that can be exceeded.
 // Using typed constants provides compile-time safety and enables exhaustive
 // switch statements for budget violation handling.
@@ -33,7 +35,7 @@ func (b BudgetType) String() string {
 	case BudgetTime:
 		return "time"
 	default:
-		return "unknown"
+		return unknownBudgetType
 	}
 }
 
