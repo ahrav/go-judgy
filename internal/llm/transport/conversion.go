@@ -106,20 +106,14 @@ func ResponseToScore(resp *Response, answerID string, req *Request, validator Sc
 
 	id := uuid.New().String()
 
-	reasonRef := domain.ArtifactRef{
-		Key:  fmt.Sprintf("rationales/%s/%s.txt", time.Now().Format("2006/01"), id),
-		Size: int64(len(scoreData.Reasoning)),
-		Kind: domain.ArtifactJudgeRationale,
-	}
-
 	score := &domain.Score{
 		ID:         id,
 		AnswerID:   answerID,
 		Value:      scoreData.Value,
 		Confidence: scoreData.Confidence,
 		ScoreEvidence: domain.ScoreEvidence{
-			ReasonRef:  reasonRef,
-			Dimensions: scoreData.Dimensions,
+			InlineReasoning: scoreData.Reasoning, // Use inline reasoning, scoring activities will handle blob-if-large
+			Dimensions:      scoreData.Dimensions,
 		},
 		ScoreProvenance: domain.ScoreProvenance{
 			JudgeID:  fmt.Sprintf("%s-%s", req.Provider, req.Model),
@@ -151,11 +145,7 @@ func CreateInvalidScore(answerID string, err error) *domain.Score {
 		Value:      0,
 		Confidence: 0,
 		ScoreEvidence: domain.ScoreEvidence{
-			ReasonRef: domain.ArtifactRef{
-				Key:  fmt.Sprintf("errors/%s/%s.txt", time.Now().Format("2006/01"), id),
-				Size: 0,
-				Kind: domain.ArtifactJudgeRationale,
-			},
+			InlineReasoning: fmt.Sprintf("Error during scoring: %v", err),
 		},
 		ScoreProvenance: domain.ScoreProvenance{
 			JudgeID:  "error",
