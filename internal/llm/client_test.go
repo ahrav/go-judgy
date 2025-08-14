@@ -321,9 +321,9 @@ func TestClient_Score(t *testing.T) {
 			Multiplier:      2.0,
 		},
 		CircuitBreaker: configuration.CircuitBreakerConfig{
-			FailureThreshold: 10,
-			SuccessThreshold: 3,
-			OpenTimeout:      time.Second,
+			FailureThreshold: 100,                    // Increase threshold to prevent premature opening in tests
+			SuccessThreshold: 1,                      // Reduce threshold for faster recovery
+			OpenTimeout:      100 * time.Millisecond, // Shorter timeout for faster recovery
 		},
 		Observability: configuration.ObservabilityConfig{MetricsEnabled: false},
 		Features: configuration.FeatureFlags{
@@ -345,9 +345,10 @@ func TestClient_Score(t *testing.T) {
 				Question: "What is the capital of France?",
 				Answers: []domain.Answer{
 					{
-						ID: "answer-1",
+						ID: "123e4567-e89b-12d3-a456-426614174000", // Valid UUID
 						ContentRef: domain.ArtifactRef{
 							Key:  "test-content-1",
+							Size: 100,
 							Kind: domain.ArtifactAnswer,
 						},
 						AnswerProvenance: domain.AnswerProvenance{
@@ -356,9 +357,10 @@ func TestClient_Score(t *testing.T) {
 						},
 					},
 					{
-						ID: "answer-2",
+						ID: "223e4567-e89b-12d3-a456-426614174000", // Valid UUID
 						ContentRef: domain.ArtifactRef{
 							Key:  "test-content-2",
+							Size: 150,
 							Kind: domain.ArtifactAnswer,
 						},
 						AnswerProvenance: domain.AnswerProvenance{
@@ -412,7 +414,7 @@ func TestArtifactStoreAdapter(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("Get", func(t *testing.T) {
-		ref := domain.ArtifactRef{Key: "test-key"}
+		ref := domain.ArtifactRef{Key: "test-key", Size: 100, Kind: domain.ArtifactAnswer}
 		mockStore.getContent = "test content"
 
 		content, err := adapter.Get(ctx, ref)
@@ -423,7 +425,7 @@ func TestArtifactStoreAdapter(t *testing.T) {
 
 	t.Run("Put", func(t *testing.T) {
 		content := "test content"
-		expectedRef := domain.ArtifactRef{Key: "generated-key"}
+		expectedRef := domain.ArtifactRef{Key: "generated-key", Size: 150, Kind: domain.ArtifactAnswer}
 		mockStore.putRef = expectedRef
 
 		ref, err := adapter.Put(ctx, content)
@@ -442,7 +444,7 @@ func TestConfigArtifactStoreAdapter(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("Get", func(t *testing.T) {
-		ref := domain.ArtifactRef{Key: "test-key"}
+		ref := domain.ArtifactRef{Key: "test-key", Size: 100, Kind: domain.ArtifactAnswer}
 		mockStore.getContent = "test content"
 
 		content, err := adapter.Get(ctx, ref)
@@ -455,7 +457,7 @@ func TestConfigArtifactStoreAdapter(t *testing.T) {
 		content := "test content"
 		kind := domain.ArtifactRawPrompt
 		key := "test-key"
-		baseRef := domain.ArtifactRef{Key: "base-key"}
+		baseRef := domain.ArtifactRef{Key: "base-key", Size: 200, Kind: domain.ArtifactAnswer}
 		mockStore.putRef = baseRef
 
 		ref, err := adapter.Put(ctx, content, kind, key)
@@ -469,7 +471,7 @@ func TestConfigArtifactStoreAdapter(t *testing.T) {
 		mockStoreWithExists := &mockConfigArtifactStoreWithExists{}
 		adapter := newConfigArtifactStoreAdapter(mockStoreWithExists)
 
-		ref := domain.ArtifactRef{Key: "test-key"}
+		ref := domain.ArtifactRef{Key: "test-key", Size: 100, Kind: domain.ArtifactAnswer}
 		mockStoreWithExists.existsResult = true
 
 		exists, err := adapter.Exists(ctx, ref)
@@ -479,7 +481,7 @@ func TestConfigArtifactStoreAdapter(t *testing.T) {
 	})
 
 	t.Run("Exists_without_interface", func(t *testing.T) {
-		ref := domain.ArtifactRef{Key: "test-key"}
+		ref := domain.ArtifactRef{Key: "test-key", Size: 100, Kind: domain.ArtifactAnswer}
 		mockStore.getContent = "exists"
 
 		exists, err := adapter.Exists(ctx, ref)

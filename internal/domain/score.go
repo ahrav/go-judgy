@@ -279,9 +279,14 @@ func (s *Score) Validate() error {
 	// Invalid scores (Valid=false) are allowed to have no reasoning.
 	// This accommodates scores that failed during the scoring process.
 	if !s.Valid {
-		// For invalid scores, allow empty reasoning but validate artifact kind if ReasonRef is present.
-		if !s.ReasonRef.IsZero() && s.ReasonRef.Kind != ArtifactJudgeRationale {
-			return ErrInvalidReasonKind
+		// For invalid scores, allow empty reasoning but validate ReasonRef if present.
+		if !s.ReasonRef.IsZero() {
+			if s.ReasonRef.Kind != ArtifactJudgeRationale {
+				return ErrInvalidReasonKind
+			}
+			if err := s.ReasonRef.Validate(); err != nil {
+				return err
+			}
 		}
 		return nil
 	}
@@ -294,9 +299,15 @@ func (s *Score) Validate() error {
 		return ErrInvalidReasonData
 	}
 
-	// Validate artifact kind requirement.
-	if hasReasonRef && s.ReasonRef.Kind != ArtifactJudgeRationale {
-		return ErrInvalidReasonKind
+	// Validate artifact kind requirement and full ReasonRef validation when present.
+	if hasReasonRef {
+		if s.ReasonRef.Kind != ArtifactJudgeRationale {
+			return ErrInvalidReasonKind
+		}
+		// Validate the ReasonRef structure (Key, Kind, etc.)
+		if err := s.ReasonRef.Validate(); err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -351,7 +362,7 @@ type ScoreEvidence struct {
 	// ReasonRef references the judge's reasoning stored as an artifact.
 	// The artifact Kind must be "judge_rationale" for proper categorization.
 	// Optional - only populated when rationale size exceeds blob threshold.
-	ReasonRef ArtifactRef `json:"reason_ref,omitempty"`
+	ReasonRef ArtifactRef `json:"reason_ref,omitempty" validate:"-"`
 
 	// InlineReasoning contains the judge's reasoning text stored directly in workflow state.
 	// Only populated when rationale size is at or below the blob threshold.

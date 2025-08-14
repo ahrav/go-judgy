@@ -1,5 +1,7 @@
 package domain
 
+import "fmt"
+
 // ArtifactKind represents the type of content stored in an artifact.
 // Using typed constants instead of raw strings provides compile-time safety
 // and prevents typos that could bypass validation.
@@ -22,8 +24,7 @@ const (
 type ArtifactRef struct {
 	// Key is the unique identifier for the stored artifact (e.g., "answers/2025/08/<id>.txt").
 	// Must be a valid storage key path for the configured blob store.
-	// Can be empty when the ArtifactRef is not used (i.e., when IsZero() returns true).
-	Key string `json:"key" validate:"required_with=Kind"`
+	Key string `json:"key" validate:"required"`
 
 	// Size is the size of the stored content in bytes.
 	// Used for storage accounting and retrieval optimization.
@@ -31,13 +32,22 @@ type ArtifactRef struct {
 
 	// Kind categorizes the type of content stored.
 	// Must be one of the defined ArtifactKind constants.
-	// Can be empty when the ArtifactRef is not used (i.e., when IsZero() returns true).
-	Kind ArtifactKind `json:"kind" validate:"required_with=Key,omitempty,oneof=answer judge_rationale raw_prompt"`
+	Kind ArtifactKind `json:"kind" validate:"required,oneof=answer judge_rationale raw_prompt"`
 }
 
 // Validate checks if the artifact reference meets all requirements.
 // Returns nil if valid, or a validation error describing the first constraint violation.
-func (a ArtifactRef) Validate() error { return validate.Struct(a) }
+func (a ArtifactRef) Validate() error {
+	// For explicit validation, require all essential fields or none (zero struct not allowed).
+	if a.Key == "" {
+		return fmt.Errorf("key: 'ArtifactRef.Key' Error:Field validation for 'Key' failed on the 'required' tag")
+	}
+	if a.Kind == "" {
+		return fmt.Errorf("key: 'ArtifactRef.Kind' Error:Field validation for 'Kind' failed on the 'required' tag")
+	}
+
+	return validate.Struct(a)
+}
 
 // IsZero reports whether the artifact reference has no meaningful value set.
 // This enables value semantics while preserving JSON omitempty behavior on
