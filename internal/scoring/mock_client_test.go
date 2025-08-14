@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -60,7 +61,8 @@ type scriptedMockClient struct {
 	generateCalls     int64
 	scoreCalls        int64
 
-	// Validator tracking for injection verification
+	// Validator tracking for injection verification (protected by mutex)
+	mu               sync.Mutex
 	lastValidator    domain.ScoreValidator
 	lastRepairPolicy *domain.RepairPolicy
 }
@@ -199,8 +201,10 @@ func (m *scriptedMockClient) Score(ctx context.Context, input domain.ScoreAnswer
 	atomic.AddInt64(&m.scoreCalls, 1)
 
 	// Store validator and repair policy for verification
+	m.mu.Lock()
 	m.lastValidator = input.Validator
 	m.lastRepairPolicy = input.RepairPolicy
+	m.mu.Unlock()
 
 	// The activity calls this with single answers, so we should only get 1 answer
 	if len(input.Answers) != 1 {
@@ -276,10 +280,14 @@ func (m *scriptedMockClient) GetCallCounts() (generate, score int64) {
 
 // GetLastValidator returns the last validator that was passed in for verification.
 func (m *scriptedMockClient) GetLastValidator() domain.ScoreValidator {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	return m.lastValidator
 }
 
 // GetLastRepairPolicy returns the last repair policy that was passed in for verification.
 func (m *scriptedMockClient) GetLastRepairPolicy() *domain.RepairPolicy {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	return m.lastRepairPolicy
 }

@@ -79,7 +79,7 @@ linters:
             - golang.org/x/time/rate
         tools:
           files:
-            - "cmd/synctest-linter/**"
+            - "cmd/synctest-linter/*.go"
           allow:
             - $gostd
             - github.com/ahrav/go-judgy
@@ -179,6 +179,7 @@ linters:
       - ".*retry_.*\\.go$"
       - ".*circuitbreaker\\.go$"
       - ".*cache\\.go$"
+      - "cmd/synctest-linter/.*"
     rules:
       # Exclude some linters from running on tests files
       - path: _test\.go

@@ -76,7 +76,7 @@ test-all: ## Run all tests (unit + integration)
 .PHONY: lint
 lint: ## Run golangci-lint
 	@echo "Running linter..."
-	@$(GOLANGCI_LINT) run ./...
+	@GOEXPERIMENT=synctest $(GOLANGCI_LINT) run ./...
 
 .PHONY: lint-synctest-build
 lint-synctest-build: ## Build standalone synctest linter
