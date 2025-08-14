@@ -207,8 +207,8 @@ type AnswerScoredPayload struct {
 	// Empty if reasoning is stored inline.
 	RationaleArtifactRef string `json:"rationale_artifact_ref,omitempty"`
 
-	// ProviderRequestID for observability and debugging.
-	ProviderRequestID string `json:"provider_request_id,omitempty"`
+	// ProviderRequestIDs for observability and debugging.
+	ProviderRequestIDs []string `json:"provider_request_ids,omitempty"`
 }
 
 // Validate checks if the payload meets all requirements.
@@ -237,7 +237,7 @@ func NewEventEnvelope(
 		ArtifactRefs: artifactRefs,
 		Payload:      payload,
 		Producer:     producer,
-		OccurredAt:   time.Now(), // Use workflow.Now(ctx) in production for deterministic time.
+		OccurredAt:   time.Now(), // Use time.Now() in activities, workflow.Now(ctx) in workflows for deterministic time.
 	}
 }
 
@@ -410,7 +410,7 @@ func NewAnswerScoredEvent(
 		CostCents:            score.CostCents,
 		HasInlineReasoning:   hasInlineReasoning,
 		RationaleArtifactRef: rationaleArtifactRef,
-		ProviderRequestID:    "", // TODO: Extract from score metadata if available.
+		ProviderRequestIDs:   score.ProviderRequestIDs,
 	}
 
 	if err := payload.Validate(); err != nil {

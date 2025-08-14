@@ -125,10 +125,11 @@ func (c *client) createScoreWithDomainValidator(
 
 	scoreID := uuid.New().String()
 	provenance := domain.ScoreProvenance{
-		JudgeID:  fmt.Sprintf("%s-%s", req.Provider, req.Model),
-		Provider: req.Provider,
-		Model:    req.Model,
-		ScoredAt: time.Now(),
+		JudgeID:            fmt.Sprintf("%s-%s", req.Provider, req.Model),
+		Provider:           req.Provider,
+		Model:              req.Model,
+		ProviderRequestIDs: resp.ProviderRequestIDs,
+		ScoredAt:           time.Now(),
 	}
 
 	evidence := domain.ScoreEvidence{
@@ -175,10 +176,11 @@ func (c *client) createScoreWithBusinessValidator(
 
 	scoreID := uuid.New().String()
 	provenance := domain.ScoreProvenance{
-		JudgeID:  fmt.Sprintf("%s-%s", req.Provider, req.Model),
-		Provider: req.Provider,
-		Model:    req.Model,
-		ScoredAt: time.Now(),
+		JudgeID:            fmt.Sprintf("%s-%s", req.Provider, req.Model),
+		Provider:           req.Provider,
+		Model:              req.Model,
+		ProviderRequestIDs: resp.ProviderRequestIDs,
+		ScoredAt:           time.Now(),
 	}
 
 	evidence := domain.ScoreEvidence{

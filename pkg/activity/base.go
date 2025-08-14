@@ -47,11 +47,11 @@ func (b *BaseActivities) GetWorkflowContext(ctx context.Context) WorkflowContext
 	func() {
 		defer func() {
 			if r := recover(); r != nil {
-				// Test context - generate deterministic test IDs for idempotency testing
-				// Use a fixed workflow ID for consistency across test runs
-				wfCtx.WorkflowID = "test-workflow-123"
+				// Test context - generate deterministic test IDs for idempotency testing.
+				// Use a fixed UUID workflow ID for consistency across test runs.
+				wfCtx.WorkflowID = "550e8400-e29b-41d4-a716-446655440000"
 				wfCtx.RunID = "test-run-" + uuid.New().String()[:8]
-				wfCtx.TenantID = "test-tenant"
+				wfCtx.TenantID = "550e8400-e29b-41d4-a716-446655440000" // Valid test UUID
 				wfCtx.ActivityID = "test-activity"
 			}
 		}()
@@ -114,6 +114,12 @@ func (b *BaseActivities) EmitEventSafe(
 	SafeLogError(ctx, fmt.Sprintf("Failed to emit %s after %d attempts", description, maxAttempts),
 		"event_type", envelope.Type,
 		"error", lastErr)
+}
+
+// RecordHeartbeat safely records a heartbeat in the Temporal activity context.
+// This method is safe to call in non-activity contexts where it will be ignored.
+func (b *BaseActivities) RecordHeartbeat(ctx context.Context, details ...any) {
+	RecordHeartbeat(ctx, details...)
 }
 
 // SafeLog performs context-safe logging that works in both activity and test contexts.

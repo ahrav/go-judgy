@@ -22,7 +22,8 @@ const (
 type ArtifactRef struct {
 	// Key is the unique identifier for the stored artifact (e.g., "answers/2025/08/<id>.txt").
 	// Must be a valid storage key path for the configured blob store.
-	Key string `json:"key" validate:"required"`
+	// Can be empty when the ArtifactRef is not used (i.e., when IsZero() returns true).
+	Key string `json:"key" validate:"required_with=Kind"`
 
 	// Size is the size of the stored content in bytes.
 	// Used for storage accounting and retrieval optimization.
@@ -30,7 +31,8 @@ type ArtifactRef struct {
 
 	// Kind categorizes the type of content stored.
 	// Must be one of the defined ArtifactKind constants.
-	Kind ArtifactKind `json:"kind" validate:"required,oneof=answer judge_rationale raw_prompt"`
+	// Can be empty when the ArtifactRef is not used (i.e., when IsZero() returns true).
+	Kind ArtifactKind `json:"kind" validate:"required_with=Key,omitempty,oneof=answer judge_rationale raw_prompt"`
 }
 
 // Validate checks if the artifact reference meets all requirements.

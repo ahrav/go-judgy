@@ -2,6 +2,8 @@
 package worker
 
 import (
+	"context"
+
 	sdkworker "go.temporal.io/sdk/worker"
 
 	"github.com/ahrav/go-judgy/internal/aggregation"
@@ -30,8 +32,12 @@ func RegisterAll(w sdkworker.Worker, llmClient llm.Client) {
 
 	// Register domain-specific activities.
 	generationActivities := generation.NewActivities(base, llmClient, artifactStore)
+
+	// Create production progress reporter for scoring activities that converts
+	// progress messages to Temporal heartbeats during workflow execution.
+	scoringProgressReporter := scoring.NewTemporalProgressReporter(context.Background(), base)
 	scoringActivities := scoring.NewActivities(
-		base, llmClient, artifactStore, domain.DefaultBlobThresholdBytes,
+		base, llmClient, artifactStore, domain.DefaultBlobThresholdBytes, scoringProgressReporter,
 	)
 	aggregationActivities := aggregation.NewActivities(base)
 
