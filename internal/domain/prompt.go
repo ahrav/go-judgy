@@ -42,7 +42,12 @@ func (p *PromptSpec) Validate() error { return validate.Struct(p) }
 //   - RenderedRef.Kind is not ArtifactRawPrompt
 //   - Rendered content cannot be accessed (future implementation)
 //   - Validation constraints are violated
-func NewPromptSpec(template string, variables map[string]string, renderedContent string, renderedRef ArtifactRef) (PromptSpec, error) {
+func NewPromptSpec(
+	template string,
+	variables map[string]string,
+	renderedContent string,
+	renderedRef ArtifactRef,
+) (PromptSpec, error) {
 	// Validate that the artifact reference is for a raw prompt
 	if renderedRef.Kind != ArtifactRawPrompt {
 		return PromptSpec{}, fmt.Errorf("rendered_ref.kind must be %q, got %q: %w", ArtifactRawPrompt, renderedRef.Kind, ErrInvalidArtifactKind)

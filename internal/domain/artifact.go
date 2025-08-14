@@ -35,4 +35,9 @@ type ArtifactRef struct {
 
 // Validate checks if the artifact reference meets all requirements.
 // Returns nil if valid, or a validation error describing the first constraint violation.
-func (a *ArtifactRef) Validate() error { return validate.Struct(a) }
+func (a ArtifactRef) Validate() error { return validate.Struct(a) }
+
+// IsZero reports whether the artifact reference has no meaningful value set.
+// This enables value semantics while preserving JSON omitempty behavior on
+// embedding structs, as encoding/json treats types with IsZero as empty.
+func (a ArtifactRef) IsZero() bool { return a.Key == "" && a.Size == 0 && a.Kind == "" }
