@@ -105,7 +105,7 @@ fmt: ## Format Go code
 .PHONY: vet
 vet: ## Run go vet
 	@echo "Running go vet..."
-	@$(GOVET) ./...
+	@GOEXPERIMENT=synctest $(GOVET) ./...
 
 .PHONY: clean
 clean: ## Clean build artifacts
