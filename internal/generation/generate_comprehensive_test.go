@@ -215,32 +215,32 @@ func TestTenantTeamPropagation(t *testing.T) {
 func TestHeartbeatAndTimeout(t *testing.T) {
 	t.Run("heartbeats prevent timeout during long operations", func(t *testing.T) {
 		synctest.Run(func() {
-		// Create Temporal test environment
-		testSuite := &testsuite.WorkflowTestSuite{}
-		env := testSuite.NewTestActivityEnvironment()
-		// Note: SetHeartbeatTimeout would be set via activity options in workflow
-		// For now, we test without explicit heartbeat timeout configuration
+			// Create Temporal test environment
+			testSuite := &testsuite.WorkflowTestSuite{}
+			env := testSuite.NewTestActivityEnvironment()
+			// Note: SetHeartbeatTimeout would be set via activity options in workflow
+			// For now, we test without explicit heartbeat timeout configuration
 
-		// Create slow client that takes 1 second
-		mockClient := NewEnhancedMockClient()
-		mockClient.generateDelay = 1 * time.Second
-		mockClient.generateReturnsError = false
+			// Create slow client that takes 1 second
+			mockClient := NewEnhancedMockClient()
+			mockClient.generateDelay = 1 * time.Second
+			mockClient.generateReturnsError = false
 
-		eventSink := NewCapturingEventSink()
-		base := activity.NewBaseActivities(eventSink)
-		artifactStore := business.NewInMemoryArtifactStore()
-		activities := NewActivities(base, mockClient, artifactStore)
+			eventSink := NewCapturingEventSink()
+			base := activity.NewBaseActivities(eventSink)
+			artifactStore := business.NewInMemoryArtifactStore()
+			activities := NewActivities(base, mockClient, artifactStore)
 
-		env.RegisterActivity(activities.GenerateAnswers)
+			env.RegisterActivity(activities.GenerateAnswers)
 
-		// Start activity with heartbeat
-		input := createValidGenerateAnswersInput()
+			// Start activity with heartbeat
+			input := createValidGenerateAnswersInput()
 
-		// This should succeed because heartbeats are sent during artifact storage
-		val, err := env.ExecuteActivity(activities.GenerateAnswers, input)
+			// This should succeed because heartbeats are sent during artifact storage
+			val, err := env.ExecuteActivity(activities.GenerateAnswers, input)
 
-		// Should complete successfully despite taking longer than heartbeat timeout
-		require.NoError(t, err, "Activity should complete with heartbeats")
+			// Should complete successfully despite taking longer than heartbeat timeout
+			require.NoError(t, err, "Activity should complete with heartbeats")
 
 			var result *domain.GenerateAnswersOutput
 			err = val.Get(&result)

@@ -16,6 +16,9 @@ import (
 	pkgactivity "github.com/ahrav/go-judgy/pkg/activity"
 )
 
+// unknownProvider represents an unknown or unavailable provider value.
+const unknownProvider = "unknown"
+
 // ProgressReporter is a function type for reporting progress during long-running operations.
 // This abstraction allows clean separation between business logic (progress reporting)
 // and infrastructure concerns (heartbeat implementation).
@@ -191,7 +194,7 @@ func (a *Activities) processBatchScoring(
 					Value:           0,
 					Confidence:      0,
 					ScoreEvidence:   domain.ScoreEvidence{InlineReasoning: ""},
-					ScoreProvenance: domain.ScoreProvenance{JudgeID: "unknown", Provider: "unknown", Model: "unknown", ScoredAt: time.Now()},
+					ScoreProvenance: domain.ScoreProvenance{JudgeID: unknownProvider, Provider: unknownProvider, Model: unknownProvider, ScoredAt: time.Now()},
 					ScoreUsage:      domain.ScoreUsage{},
 					ScoreValidity:   domain.ScoreValidity{Valid: false, Error: err.Error()},
 				}
@@ -369,10 +372,10 @@ func (a *Activities) emitScoringEvents(
 
 	// Ensure usage events are emitted even for all-failure cases by providing defaults
 	if provider == "" {
-		provider = "unknown" // Satisfy validation requirement for failed operations
+		provider = unknownProvider // Satisfy validation requirement for failed operations
 	}
 	if len(judgeModels) == 0 {
-		judgeModels = []string{"unknown"} // Satisfy validation requirement for failed operations
+		judgeModels = []string{unknownProvider} // Satisfy validation requirement for failed operations
 	}
 
 	// Emit aggregated usage metrics for cost tracking and optimization.
@@ -388,7 +391,7 @@ func extractJudgeModels(scores []domain.Score) []string {
 
 	modelSet := make(map[string]bool)
 	for _, score := range scores {
-		if score.Model != "" && score.Model != "unknown" {
+		if score.Model != "" && score.Model != unknownProvider {
 			modelSet[score.Model] = true
 		}
 	}
@@ -413,7 +416,7 @@ func extractProvider(scores []domain.Score) string {
 	}
 
 	for _, score := range scores {
-		if score.Provider != "" && score.Provider != "unknown" {
+		if score.Provider != "" && score.Provider != unknownProvider {
 			return score.Provider
 		}
 	}

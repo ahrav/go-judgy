@@ -18,6 +18,8 @@ import (
 const (
 	DefaultMaxTokens          = 1000
 	DefaultScoringTemperature = 0.1
+	// milliToCentsConversionFactor converts milli-cents to cents (divide by 1000).
+	milliToCentsConversionFactor = 1000
 )
 
 // Score implements Client.Score with validator injection and repair capabilities.
@@ -148,7 +150,7 @@ func (c *client) createScoreWithDomainValidator(
 		LatencyMs:  resp.Usage.LatencyMs,
 		TokensUsed: resp.Usage.TotalTokens,
 		CallsUsed:  1,
-		CostCents:  domain.Cents(resp.EstimatedCostMilliCents / 1000), // Convert to cents
+		CostCents:  domain.Cents(resp.EstimatedCostMilliCents / milliToCentsConversionFactor), // Convert to cents
 	}
 
 	if repaired {
@@ -199,7 +201,7 @@ func (c *client) createScoreWithBusinessValidator(
 		LatencyMs:  resp.Usage.LatencyMs,
 		TokensUsed: resp.Usage.TotalTokens,
 		CallsUsed:  1,
-		CostCents:  domain.Cents(resp.EstimatedCostMilliCents / 1000), // Convert to cents
+		CostCents:  domain.Cents(resp.EstimatedCostMilliCents / milliToCentsConversionFactor), // Convert to cents
 	}
 
 	return score, nil
