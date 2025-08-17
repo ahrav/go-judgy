@@ -18,6 +18,37 @@
 //   - Validation: Comprehensive input/output contract enforcement
 package domain
 
+// AggregationMethod represents the statistical method used to aggregate scores.
+type AggregationMethod string
+
+const (
+	// AggregationMethodMean calculates the arithmetic average of all valid scores.
+	AggregationMethodMean AggregationMethod = "mean"
+
+	// AggregationMethodMedian finds the middle value when scores are sorted.
+	AggregationMethodMedian AggregationMethod = "median"
+
+	// AggregationMethodTrimmedMean calculates the mean after removing outliers from both ends.
+	AggregationMethodTrimmedMean AggregationMethod = "trimmed_mean"
+)
+
+// String returns the string representation of the aggregation method.
+func (m AggregationMethod) String() string { return string(m) }
+
+// AggregationPolicy defines how scores are combined during aggregation.
+// It supports multiple statistical methods including mean, median, and trimmed mean,
+// allowing flexibility in how judge scores are consolidated into a final verdict.
+type AggregationPolicy struct {
+	// Method specifies the aggregation algorithm to use.
+	// Supported values: AggregationMethodMean, AggregationMethodMedian, AggregationMethodTrimmedMean
+	Method AggregationMethod `json:"method" validate:"required,oneof=mean median trimmed_mean"`
+
+	// TrimFraction specifies the fraction of scores to trim from each end
+	// when using trimmed_mean method (e.g., 0.1 for 10% trim from each end).
+	// Ignored for other aggregation methods.
+	TrimFraction float64 `json:"trim_fraction" validate:"min=0,max=0.5"`
+}
+
 // AggregateScoresInput represents the input for the AggregateScores evaluation operation.
 // It contains the scores to be statistically aggregated and the original answers
 // for reference and winner determination. This operation contract enables the
@@ -30,6 +61,18 @@ type AggregateScoresInput struct {
 	// Answers are the original generated answers for winner determination.
 	// Used to identify which answer achieved the highest aggregate score.
 	Answers []Answer `json:"answers" validate:"required,min=1"`
+
+	// Policy defines the aggregation method and parameters to use.
+	// Determines how individual scores are combined into a final verdict.
+	Policy AggregationPolicy `json:"policy" validate:"required"`
+
+	// MinValidScores specifies the minimum number of valid scores required.
+	// Aggregation fails if fewer than this many scores are valid.
+	MinValidScores int `json:"min_valid_scores" validate:"min=1"`
+
+	// ClientIdempotencyKey enables deterministic event generation.
+	// Used to create consistent idempotency keys for emitted events.
+	ClientIdempotencyKey string `json:"client_idempotency_key" validate:"required"`
 }
 
 // Validate checks if the aggregate scores input meets all operation contract requirements.
@@ -42,12 +85,36 @@ func (a *AggregateScoresInput) Validate() error { return validate.Struct(a) }
 // the final evaluation result for decision-making and quality assessment.
 type AggregateScoresOutput struct {
 	// WinnerAnswer is a pointer to the answer with the highest individual score.
-	// Nil if no valid scores exist or all scores are equal (tie condition).
+	// Deprecated: Use WinnerAnswerID instead for cleaner data contracts.
 	WinnerAnswer *Answer `json:"winner_answer,omitempty"`
 
-	// AggregateScore is the arithmetic mean of all valid individual scores.
+	// WinnerAnswerID identifies the answer with the highest score.
+	// Empty if no valid scores exist or winner cannot be determined.
+	WinnerAnswerID string `json:"winner_answer_id,omitempty"`
+
+	// AggregateScore is the final aggregated score using the specified method.
 	// Represents the overall quality assessment for the evaluation session.
 	AggregateScore float64 `json:"aggregate_score" validate:"min=0,max=1"`
+
+	// Method indicates which aggregation method was actually used.
+	// Confirms the policy that was applied (mean, median, or trimmed_mean).
+	Method AggregationMethod `json:"method" validate:"required"`
+
+	// ValidScoreCount is the number of valid scores used in aggregation.
+	// Excludes scores where Valid=false or Error is non-empty.
+	ValidScoreCount int `json:"valid_score_count" validate:"min=0"`
+
+	// TotalScoreCount is the total number of scores provided.
+	// Includes both valid and invalid scores for completeness.
+	TotalScoreCount int `json:"total_score_count" validate:"min=0"`
+
+	// TiedWithIDs lists answer IDs that tied with the winner.
+	// Empty if there was a clear winner or no valid scores.
+	TiedWithIDs []string `json:"tied_with_ids,omitempty"`
+
+	// CostCents is the total cost aggregated from all scores.
+	// Includes costs from both valid and invalid scores.
+	CostCents Cents `json:"cost_cents" validate:"min=0"`
 
 	// AggregateDimensions contains per-dimension aggregate scores when available.
 	// Populated only when input scores contain dimension breakdowns.

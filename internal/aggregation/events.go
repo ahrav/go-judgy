@@ -5,9 +5,7 @@ package aggregation
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"time"
 
 	"github.com/google/uuid"
 
@@ -15,35 +13,6 @@ import (
 	"github.com/ahrav/go-judgy/pkg/activity"
 	"github.com/ahrav/go-judgy/pkg/events"
 )
-
-// verdictProducedEvent represents the final aggregated scoring result.
-// Emitted when individual scores are combined into a final verdict,
-// providing visibility into the aggregation policy and decision process.
-type verdictProducedEvent struct {
-	VerdictID         string                 `json:"verdict_id"`
-	FinalScore        float64                `json:"final_score"`
-	AggregationPolicy string                 `json:"aggregation_policy"`
-	ScoreCount        int                    `json:"score_count"`
-	ScoreDistribution map[string]float64     `json:"score_distribution"`
-	Confidence        float64                `json:"confidence"`
-	Decision          string                 `json:"decision"`
-	Metadata          map[string]interface{} `json:"metadata"`
-	ProducedAt        time.Time              `json:"produced_at"`
-}
-
-// aggregationCompleteEvent represents the completion of score aggregation.
-// Provides summary statistics and metadata about the aggregation process.
-type aggregationCompleteEvent struct {
-	TotalScores       int     `json:"total_scores"`
-	TotalAnswers      int     `json:"total_answers"`
-	AggregationPolicy string  `json:"aggregation_policy"`
-	MinScore          float64 `json:"min_score"`
-	MaxScore          float64 `json:"max_score"`
-	MeanScore         float64 `json:"mean_score"`
-	MedianScore       float64 `json:"median_score"`
-	ProcessingTimeMs  int64   `json:"processing_time_ms"`
-	ClientIdemKey     string  `json:"client_idem_key"`
-}
 
 // EventEmitter handles event emission for the aggregation domain.
 // It encapsulates the logic for creating and emitting aggregation-specific
@@ -53,145 +22,81 @@ type EventEmitter struct {
 }
 
 // NewEventEmitter creates a new EventEmitter with the provided base activities.
+// The base activities provide event emission and logging infrastructure.
 func NewEventEmitter(base activity.BaseActivities) *EventEmitter {
 	return &EventEmitter{base: base}
 }
 
-// EmitVerdictProduced emits an event for the final aggregated verdict.
-// This provides visibility into the aggregation decision process,
-// including the score distribution and final decision.
-func (e *EventEmitter) EmitVerdictProduced(
+// EmitVerdictReached emits a VerdictReached event with aggregation results.
+// It creates events with complete aggregation metadata for downstream projections.
+// Event emission is best-effort; failures are logged without affecting core operations.
+func (e *EventEmitter) EmitVerdictReached(
 	ctx context.Context,
-	verdict domain.Verdict,
+	verdictID string,
+	output *domain.AggregateScoresOutput,
+	scoreIDs []string,
+	artifactRefs []string,
 	wfCtx activity.WorkflowContext,
 	clientIdemKey string,
 ) {
-	// Create a simplified event for the verdict
-	// In production, this would extract actual fields from VerdictOutcome
-	event := verdictProducedEvent{
-		VerdictID:         verdict.ID,
-		FinalScore:        0.0,    // Would be extracted from VerdictOutcome
-		AggregationPolicy: "mean", // Default policy for now
-		ScoreCount:        0,      // Would be calculated from actual scores
-		ScoreDistribution: make(map[string]float64),
-		Confidence:        0.0,       // Would be extracted from VerdictOutcome
-		Decision:          "pending", // Would be extracted from VerdictOutcome
-		Metadata:          make(map[string]interface{}),
-		ProducedAt:        time.Now(),
-	}
-
-	payload, err := json.Marshal(event)
+	tenantID, err := parseUUID(wfCtx.TenantID, "tenant")
 	if err != nil {
-		activity.SafeLogError(ctx, "Failed to marshal verdict event", "error", err)
+		activity.SafeLogError(ctx, "Failed to parse tenant ID for VerdictReached event",
+			"tenant_id", wfCtx.TenantID,
+			"error", err)
 		return
 	}
 
-	envelope := events.Envelope{
-		ID:             uuid.New().String(),
-		Type:           "aggregation.verdict_produced",
-		Source:         "aggregation-activity",
-		Version:        "1.0.0",
-		Timestamp:      time.Now(),
-		IdempotencyKey: fmt.Sprintf("%s-verdict-%s", clientIdemKey, verdict.ID),
-		TenantID:       wfCtx.TenantID,
-		WorkflowID:     wfCtx.WorkflowID,
-		RunID:          wfCtx.RunID,
-		Payload:        payload,
-	}
-
-	e.base.EmitEventSafe(ctx, envelope, fmt.Sprintf("VerdictProduced[%s]", verdict.ID))
-}
-
-// EmitAggregationComplete emits a summary event for the aggregation process.
-// This provides statistics and metadata about the aggregation operation,
-// useful for monitoring aggregation performance and policy effectiveness.
-func (e *EventEmitter) EmitAggregationComplete(
-	ctx context.Context,
-	_ *domain.AggregateScoresOutput,
-	input domain.AggregateScoresInput,
-	wfCtx activity.WorkflowContext,
-	clientIdemKey string,
-	processingTimeMs int64,
-) {
-	// Calculate statistics
-	stats := calculateScoreStatistics(input.Scores)
-
-	event := aggregationCompleteEvent{
-		TotalScores:       len(input.Scores),
-		TotalAnswers:      len(input.Answers),
-		AggregationPolicy: "mean", // Default policy for now
-		MinScore:          stats.min,
-		MaxScore:          stats.max,
-		MeanScore:         stats.mean,
-		MedianScore:       stats.median,
-		ProcessingTimeMs:  processingTimeMs,
-		ClientIdemKey:     clientIdemKey, // Pass clientIdemKey as parameter
-	}
-
-	payload, err := json.Marshal(event)
+	domainEvent, err := domain.NewVerdictReachedEvent(
+		tenantID,
+		wfCtx.WorkflowID,
+		wfCtx.RunID,
+		verdictID,
+		output,
+		scoreIDs,
+		artifactRefs,
+		clientIdemKey,
+	)
 	if err != nil {
-		activity.SafeLogError(ctx, "Failed to marshal aggregation complete event", "error", err)
+		activity.SafeLogError(ctx, "Failed to create VerdictReached event",
+			"verdict_id", verdictID,
+			"error", err)
 		return
 	}
 
-	envelope := events.Envelope{
-		ID:             uuid.New().String(),
-		Type:           "aggregation.complete",
-		Source:         "aggregation-activity",
-		Version:        "1.0.0",
-		Timestamp:      time.Now(),
-		IdempotencyKey: fmt.Sprintf("%s-aggregation-complete", clientIdemKey),
-		TenantID:       wfCtx.TenantID,
-		WorkflowID:     wfCtx.WorkflowID,
-		RunID:          wfCtx.RunID,
-		Payload:        payload,
-	}
+	envelope := convertDomainEventToEnvelope(domainEvent)
 
-	e.base.EmitEventSafe(ctx, envelope, "AggregationComplete")
+	e.base.EmitEventSafe(ctx, envelope, fmt.Sprintf("VerdictReached[%s]", verdictID))
 }
 
-// scoreStatistics holds calculated statistics for a set of scores.
-type scoreStatistics struct {
-	min    float64
-	max    float64
-	mean   float64
-	median float64
+// parseUUID safely parses a string as UUID with descriptive error messages.
+// It handles the special case of "default" for test contexts, returning a deterministic UUID.
+func parseUUID(input, context string) (uuid.UUID, error) {
+	parsed, err := uuid.Parse(input)
+	if err != nil {
+		// For test contexts where TenantID might be "default"
+		if input == "default" {
+			return uuid.MustParse("550e8400-e29b-41d4-a716-446655440000"), nil
+		}
+		return uuid.Nil, fmt.Errorf("invalid %s UUID '%s': %w", context, input, err)
+	}
+	return parsed, nil
 }
 
-// calculateScoreStatistics computes basic statistics for a set of scores.
-func calculateScoreStatistics(scores []domain.Score) scoreStatistics {
-	if len(scores) == 0 {
-		return scoreStatistics{}
-	}
-
-	// Extract score values
-	values := make([]float64, len(scores))
-	sum := 0.0
-	minScore := scores[0].Value
-	maxScore := scores[0].Value
-
-	for i, score := range scores {
-		values[i] = score.Value
-		sum += score.Value
-		if score.Value < minScore {
-			minScore = score.Value
-		}
-		if score.Value > maxScore {
-			maxScore = score.Value
-		}
-	}
-
-	// Calculate mean
-	mean := sum / float64(len(scores))
-
-	// Calculate median (simplified - doesn't sort)
-	// In production, would properly sort and find median
-	median := values[len(values)/2]
-
-	return scoreStatistics{
-		min:    minScore,
-		max:    maxScore,
-		mean:   mean,
-		median: median,
+// convertDomainEventToEnvelope converts domain.EventEnvelope to events.Envelope.
+// This bridges the domain event system with the base activity infrastructure,
+// mapping domain-specific fields to the generic event envelope format.
+func convertDomainEventToEnvelope(domainEvent domain.EventEnvelope) events.Envelope {
+	return events.Envelope{
+		ID:             domainEvent.IdempotencyKey, // Use idempotency key for deterministic IDs
+		Type:           string(domainEvent.EventType),
+		Source:         domainEvent.Producer,
+		Version:        fmt.Sprintf("%d.0.0", domainEvent.Version),
+		Timestamp:      domainEvent.OccurredAt,
+		IdempotencyKey: domainEvent.IdempotencyKey,
+		TenantID:       domainEvent.TenantID.String(),
+		WorkflowID:     domainEvent.WorkflowID,
+		RunID:          domainEvent.RunID,
+		Payload:        domainEvent.Payload,
 	}
 }

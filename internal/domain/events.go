@@ -43,6 +43,10 @@ const (
 	// EventTypeLLMUsage is emitted when an LLM operation completes.
 	// One event per activity with aggregated usage and cost data.
 	EventTypeLLMUsage EventType = "LLMUsage"
+
+	// EventTypeVerdictReached is emitted when score aggregation produces a verdict.
+	// One event per aggregation with complete verdict data for UI projections.
+	EventTypeVerdictReached EventType = "VerdictReached"
 )
 
 // EventEnvelope wraps all events with consistent metadata for projection processing.
@@ -216,6 +220,42 @@ func (a *AnswerScoredPayload) Validate() error {
 	return validate.Struct(a)
 }
 
+// VerdictReachedPayload contains the data for VerdictReached events.
+// One event per aggregation with complete verdict metadata for projections.
+type VerdictReachedPayload struct {
+	// VerdictID uniquely identifies the verdict.
+	VerdictID string `json:"verdict_id" validate:"required,uuid"`
+
+	// WinnerAnswerID identifies the answer with the highest score.
+	WinnerAnswerID string `json:"winner_answer_id" validate:"required"`
+
+	// AggregateScore is the final aggregated score value.
+	AggregateScore float64 `json:"aggregate_score" validate:"min=0,max=1"`
+
+	// Method indicates the aggregation method used (mean, median, trimmed_mean).
+	Method AggregationMethod `json:"method" validate:"required"`
+
+	// ValidScoreCount is the number of valid scores used in aggregation.
+	ValidScoreCount int `json:"valid_score_count" validate:"min=0"`
+
+	// TotalScoreCount is the total number of scores (including invalid).
+	TotalScoreCount int `json:"total_score_count" validate:"min=0"`
+
+	// ScoreIDs contains all score IDs that were aggregated.
+	ScoreIDs []string `json:"score_ids" validate:"required,min=1"`
+
+	// ArtifactRefs contains ReasonRefs from scores for projection resolution.
+	ArtifactRefs []string `json:"artifact_refs,omitempty"`
+
+	// TotalCostCents is the aggregated cost from all scores.
+	TotalCostCents Cents `json:"total_cost_cents" validate:"min=0"`
+}
+
+// Validate checks if the payload meets all requirements.
+func (v *VerdictReachedPayload) Validate() error {
+	return validate.Struct(v)
+}
+
 // NewEventEnvelope creates a new EventEnvelope with required fields populated.
 // Uses provided workflow context for deterministic IDs and timestamps.
 // The payload should be marshaled JSON for the specific event type.
@@ -279,6 +319,63 @@ func AnswerScoredIdempotencyKey(clientIdempotencyKey string, answerIndex int) st
 // Uses the pattern specified in story: H(client_idem_key || ":scoring:1").
 func ScoringUsageIdempotencyKey(clientIdempotencyKey string) string {
 	return GenerateIdempotencyKey(clientIdempotencyKey, ":scoring:1")
+}
+
+// VerdictReachedIdempotencyKey generates idempotency key for verdict reached events.
+// Uses the pattern specified in story: H(client_idem_key || ":verdict:1").
+func VerdictReachedIdempotencyKey(clientIdempotencyKey string) string {
+	return GenerateIdempotencyKey(clientIdempotencyKey, ":verdict:1")
+}
+
+// NewVerdictReachedEvent creates a VerdictReached event envelope.
+// Includes aggregation metadata and artifact references for projection processing.
+func NewVerdictReachedEvent(
+	tenantID uuid.UUID,
+	workflowID, runID string,
+	verdictID string,
+	output *AggregateScoresOutput,
+	scoreIDs []string,
+	artifactRefs []string,
+	clientIdempotencyKey string,
+) (EventEnvelope, error) {
+	payload := VerdictReachedPayload{
+		VerdictID:       verdictID,
+		WinnerAnswerID:  output.WinnerAnswerID,
+		AggregateScore:  output.AggregateScore,
+		Method:          output.Method,
+		ValidScoreCount: output.ValidScoreCount,
+		TotalScoreCount: output.TotalScoreCount,
+		ScoreIDs:        scoreIDs,
+		ArtifactRefs:    artifactRefs,
+		TotalCostCents:  output.CostCents,
+	}
+
+	if err := payload.Validate(); err != nil {
+		return EventEnvelope{}, fmt.Errorf("invalid verdict reached payload: %w", err)
+	}
+
+	payloadJSON, err := json.Marshal(payload)
+	if err != nil {
+		return EventEnvelope{}, fmt.Errorf("failed to marshal payload: %w", err)
+	}
+
+	envelope := NewEventEnvelope(
+		EventTypeVerdictReached,
+		tenantID,
+		workflowID,
+		runID,
+		payloadJSON,
+		"activity.aggregate_scores",
+		artifactRefs,
+	)
+
+	envelope.IdempotencyKey = VerdictReachedIdempotencyKey(clientIdempotencyKey)
+
+	if err := envelope.Validate(); err != nil {
+		return EventEnvelope{}, fmt.Errorf("invalid event envelope: %w", err)
+	}
+
+	return envelope, nil
 }
 
 // NewCandidateProducedEvent creates a CandidateProduced event envelope.
