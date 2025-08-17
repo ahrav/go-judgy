@@ -422,24 +422,33 @@ func TestAggregateScoresInput_Validate(t *testing.T) {
 		{
 			name: "valid input",
 			input: AggregateScoresInput{
-				Scores:  []Score{validScore},
-				Answers: []Answer{validAnswer},
+				Scores:               []Score{validScore},
+				Answers:              []Answer{validAnswer},
+				Policy:               AggregationPolicy{Method: AggregationMethodMean},
+				MinValidScores:       1,
+				ClientIdempotencyKey: "test-key-123",
 			},
 			wantErr: false,
 		},
 		{
 			name: "empty scores",
 			input: AggregateScoresInput{
-				Scores:  []Score{},
-				Answers: []Answer{validAnswer},
+				Scores:               []Score{},
+				Answers:              []Answer{validAnswer},
+				Policy:               AggregationPolicy{Method: AggregationMethodMean},
+				MinValidScores:       1,
+				ClientIdempotencyKey: "test-key-123",
 			},
 			wantErr: true,
 		},
 		{
 			name: "empty answers",
 			input: AggregateScoresInput{
-				Scores:  []Score{validScore},
-				Answers: []Answer{},
+				Scores:               []Score{validScore},
+				Answers:              []Answer{},
+				Policy:               AggregationPolicy{Method: AggregationMethodMean},
+				MinValidScores:       1,
+				ClientIdempotencyKey: "test-key-123",
 			},
 			wantErr: true,
 		},
@@ -482,6 +491,7 @@ func TestAggregateScoresOutput_Validate(t *testing.T) {
 			output: AggregateScoresOutput{
 				WinnerAnswer:   &validAnswer,
 				AggregateScore: 0.8,
+				Method:         AggregationMethodMean,
 			},
 			wantErr: false,
 		},
@@ -490,6 +500,7 @@ func TestAggregateScoresOutput_Validate(t *testing.T) {
 			output: AggregateScoresOutput{
 				WinnerAnswer:   nil,
 				AggregateScore: 0.5,
+				Method:         AggregationMethodMean,
 			},
 			wantErr: false,
 		},
@@ -498,6 +509,7 @@ func TestAggregateScoresOutput_Validate(t *testing.T) {
 			output: AggregateScoresOutput{
 				WinnerAnswer:   &validAnswer,
 				AggregateScore: -0.1,
+				Method:         AggregationMethodMean,
 			},
 			wantErr: true,
 		},
@@ -506,6 +518,7 @@ func TestAggregateScoresOutput_Validate(t *testing.T) {
 			output: AggregateScoresOutput{
 				WinnerAnswer:   &validAnswer,
 				AggregateScore: 1.1,
+				Method:         AggregationMethodMean,
 			},
 			wantErr: true,
 		},

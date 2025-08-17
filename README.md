@@ -54,6 +54,7 @@ kubectl apply -f job.yaml
 ```bash
 make test          # Run all tests with race detection
 make lint          # Code linting and formatting
+make lint-synctest # Check for time.Sleep usage without synctest
 make pre-commit    # Full validation before commit
 ```
 
