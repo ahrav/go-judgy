@@ -569,18 +569,18 @@ func FuzzScoreValidation(f *testing.F) {
 
 		// Configure reasoning
 		if hasInline {
-			score.ScoreEvidence.InlineReasoning = "test reasoning"
+			score.InlineReasoning = "test reasoning"
 		} else {
-			score.ScoreEvidence.InlineReasoning = ""
+			score.InlineReasoning = ""
 		}
 
 		if hasRef {
-			score.ScoreEvidence.ReasonRef = domain.ArtifactRef{
+			score.ReasonRef = domain.ArtifactRef{
 				Key:  "test-ref",
 				Kind: domain.ArtifactJudgeRationale,
 			}
 		} else {
-			score.ScoreEvidence.ReasonRef = domain.ArtifactRef{}
+			score.ReasonRef = domain.ArtifactRef{}
 		}
 
 		err := validateScoreReasoning([]domain.Score{score})

@@ -46,6 +46,13 @@ import (
 // during statistical calculations.
 const epsilon = 1e-9
 
+// medianDivisor is used to calculate the average of two middle values in even-length arrays.
+const medianDivisor = 2
+
+// maxTrimFraction defines the maximum allowable trim fraction for trimmed mean calculations.
+// Values above this threshold would remove too much data to be meaningful.
+const maxTrimFraction = 0.5
+
 // MetricsRecorder provides an interface for recording aggregation metrics.
 // This allows for observability into the aggregation process without
 // tight coupling to a specific metrics implementation.
@@ -321,7 +328,7 @@ func calculateMedian(scores []domain.Score) float64 {
 	// Average of two middle values for even-length arrays.
 	mid1 := values[n/2-1]
 	mid2 := values[n/2]
-	return (mid1 + mid2) / 2
+	return (mid1 + mid2) / medianDivisor
 }
 
 // calculateTrimmedMean computes the mean after removing outliers from both ends.
@@ -338,8 +345,8 @@ func calculateTrimmedMean(scores []domain.Score, trimFraction float64) float64 {
 	if trimFraction < 0 {
 		trimFraction = 0
 	}
-	if trimFraction > 0.5 {
-		trimFraction = 0.5
+	if trimFraction > maxTrimFraction {
+		trimFraction = maxTrimFraction
 	}
 
 	values := make([]float64, len(scores))
@@ -479,7 +486,7 @@ func calculateMedianValues(values []float64) float64 {
 	if n%2 == 1 {
 		return sorted[n/2]
 	}
-	return (sorted[n/2-1] + sorted[n/2]) / 2
+	return (sorted[n/2-1] + sorted[n/2]) / medianDivisor
 }
 
 // calculateTrimmedMeanValues computes the trimmed mean of raw values.
@@ -494,8 +501,8 @@ func calculateTrimmedMeanValues(values []float64, trimFraction float64) float64 
 	if trimFraction < 0 {
 		trimFraction = 0
 	}
-	if trimFraction > 0.5 {
-		trimFraction = 0.5
+	if trimFraction > maxTrimFraction {
+		trimFraction = maxTrimFraction
 	}
 
 	sorted := make([]float64, len(values))
@@ -578,10 +585,10 @@ func nonRetryable(tag string, cause error, msg string) error {
 type NoOpMetrics struct{}
 
 // IncrementCounter discards counter increments.
-func (n *NoOpMetrics) IncrementCounter(name string, tags map[string]string, value float64) {}
+func (n *NoOpMetrics) IncrementCounter(_ string, _ map[string]string, _ float64) {}
 
 // RecordHistogram discards histogram recordings.
-func (n *NoOpMetrics) RecordHistogram(name string, tags map[string]string, value float64) {}
+func (n *NoOpMetrics) RecordHistogram(_ string, _ map[string]string, _ float64) {}
 
 // SetGauge discards gauge settings.
-func (n *NoOpMetrics) SetGauge(name string, tags map[string]string, value float64) {}
+func (n *NoOpMetrics) SetGauge(_ string, _ map[string]string, _ float64) {}

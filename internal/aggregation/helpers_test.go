@@ -313,19 +313,19 @@ func WithScoreValidity(valid bool, errorMsg string) ScoreOption {
 // WithInlineReasoning sets inline reasoning for the score.
 func WithInlineReasoning(reasoning string) ScoreOption {
 	return func(s *domain.Score) {
-		s.ScoreEvidence.InlineReasoning = reasoning
-		s.ScoreEvidence.ReasonRef = domain.ArtifactRef{} // Clear ref
+		s.InlineReasoning = reasoning
+		s.ReasonRef = domain.ArtifactRef{} // Clear ref
 	}
 }
 
 // WithReasonRef sets a reason reference for the score.
 func WithReasonRef(key string) ScoreOption {
 	return func(s *domain.Score) {
-		s.ScoreEvidence.ReasonRef = domain.ArtifactRef{
+		s.ReasonRef = domain.ArtifactRef{
 			Key:  key,
 			Kind: domain.ArtifactJudgeRationale,
 		}
-		s.ScoreEvidence.InlineReasoning = "" // Clear inline
+		s.InlineReasoning = "" // Clear inline
 	}
 }
 
@@ -339,14 +339,14 @@ func WithScoreConfidence(confidence float64) ScoreOption {
 // WithScoreCost sets the cost in cents.
 func WithScoreCost(costCents int64) ScoreOption {
 	return func(s *domain.Score) {
-		s.ScoreUsage.CostCents = domain.Cents(costCents)
+		s.CostCents = domain.Cents(costCents)
 	}
 }
 
 // WithScoreTokens sets the tokens used.
 func WithScoreTokens(tokens int64) ScoreOption {
 	return func(s *domain.Score) {
-		s.ScoreUsage.TokensUsed = tokens
+		s.TokensUsed = tokens
 	}
 }
 
